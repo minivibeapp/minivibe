@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MiniVibe CLI Login</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --primary: #667eea;
+      --primary-dark: #5a67d8;
+      --gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      --text: #1a202c;
+      --text-muted: #718096;
+      --bg: #f7fafc;
+      --border: #e2e8f0;
+    }
+
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: var(--gradient);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+
+    .container {
+      background: white;
+      padding: 48px 40px;
+      border-radius: 20px;
+      box-shadow: 0 25px 80px rgba(0, 0, 0, 0.3);
+      text-align: center;
+      max-width: 420px;
+      width: 100%;
+    }
+
+    .logo {
+      width: 64px;
+      height: 64px;
+      background: var(--gradient);
+      border-radius: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0 auto 24px;
+      font-size: 32px;
+      color: white;
+      font-weight: 700;
+    }
+
+    h1 {
+      color: var(--text);
+      font-size: 28px;
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
+
+    .subtitle {
+      color: var(--text-muted);
+      font-size: 15px;
+      margin-bottom: 36px;
+    }
+
+    .btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      width: 100%;
+      padding: 14px 24px;
+      font-size: 15px;
+      font-weight: 500;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: white;
+      cursor: pointer;
+      transition: all 0.2s;
+      margin-bottom: 12px;
+      color: var(--text);
+    }
+
+    .btn:hover {
+      background: var(--bg);
+      border-color: #cbd5e0;
+    }
+
+    .btn:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+
+    .btn img {
+      width: 20px;
+      height: 20px;
+    }
+
+    .status {
+      margin-top: 20px;
+      padding: 14px 16px;
+      border-radius: 10px;
+      font-size: 14px;
+      display: none;
+    }
+
+    .status.success {
+      display: block;
+      background: #c6f6d5;
+      color: #22543d;
+    }
+
+    .status.error {
+      display: block;
+      background: #fed7d7;
+      color: #c53030;
+    }
+
+    .status.loading {
+      display: block;
+      background: #e9d8fd;
+      color: #553c9a;
+    }
+
+    .close-msg {
+      margin-top: 20px;
+      color: var(--text-muted);
+      font-size: 14px;
+    }
+
+    .features {
+      margin-top: 32px;
+      padding-top: 24px;
+      border-top: 1px solid var(--border);
+      text-align: left;
+    }
+
+    .features h3 {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 16px;
+    }
+
+    .feature {
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      margin-bottom: 14px;
+    }
+
+    .feature-icon {
+      font-size: 18px;
+      line-height: 1;
+    }
+
+    .feature-text {
+      font-size: 14px;
+      color: var(--text);
+    }
+
+    .success-content {
+      display: none;
+    }
+
+    .success-content.visible {
+      display: block;
+    }
+
+    .success-icon {
+      width: 80px;
+      height: 80px;
+      background: #c6f6d5;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0 auto 24px;
+      font-size: 40px;
+    }
+
+    .next-steps {
+      text-align: left;
+      margin-top: 32px;
+    }
+
+    .next-step {
+      background: var(--bg);
+      padding: 16px;
+      border-radius: 10px;
+      margin-bottom: 12px;
+    }
+
+    .next-step-title {
+      font-weight: 600;
+      font-size: 14px;
+      margin-bottom: 8px;
+      color: var(--text);
+    }
+
+    .next-step-code {
+      background: #1a202c;
+      color: #e2e8f0;
+      padding: 10px 14px;
+      border-radius: 6px;
+      font-family: 'SF Mono', Monaco, monospace;
+      font-size: 13px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <!-- Login Content -->
+    <div id="loginContent">
+      <div class="logo">M</div>
+      <h1>MiniVibe</h1>
+      <p class="subtitle">Sign in to connect your CLI to your account</p>
+
+      <button id="signInBtn" class="btn" onclick="signIn()">
+        <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google">
+        Sign in with Google
+      </button>
+
+      <div id="status" class="status"></div>
+
+      <div class="features">
+        <h3>What you'll get</h3>
+        <div class="feature">
+          <span class="feature-icon">&#128241;</span>
+          <span class="feature-text">Control Claude Code sessions from your iPhone</span>
+        </div>
+        <div class="feature">
+          <span class="feature-icon">&#9889;</span>
+          <span class="feature-text">Approve permissions remotely</span>
+        </div>
+        <div class="feature">
+          <span class="feature-icon">&#128260;</span>
+          <span class="feature-text">Manage multiple sessions in parallel</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Success Content -->
+    <div id="successContent" class="success-content">
+      <div class="success-icon">&#10003;</div>
+      <h1>You're Connected!</h1>
+      <p class="subtitle" id="emailDisplay">Signed in as user@example.com</p>
+
+      <div class="next-steps">
+        <div class="next-step">
+          <div class="next-step-title">Start your first session</div>
+          <div class="next-step-code">vibe "Fix the login bug"</div>
+        </div>
+        <div class="next-step">
+          <div class="next-step-title">Or start with a name</div>
+          <div class="next-step-code">vibe --name "Auth Fix" "Fix bug"</div>
+        </div>
+      </div>
+
+      <p class="close-msg">You can close this window and return to your terminal.</p>
+    </div>
+  </div>
+
+  <script type="module">
+    import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
+    import { getAuth, signInWithPopup, GoogleAuthProvider } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js';
+
+    // Firebase config will be injected by the server
+    const firebaseConfig = window.FIREBASE_CONFIG;
+
+    if (!firebaseConfig) {
+      showStatus('error', 'Firebase configuration not found. Check your setup.');
+    } else {
+      const app = initializeApp(firebaseConfig);
+      const auth = getAuth(app);
+      const provider = new GoogleAuthProvider();
+
+      window.signIn = async function() {
+        const btn = document.getElementById('signInBtn');
+        btn.disabled = true;
+        showStatus('loading', 'Opening sign-in popup...');
+
+        try {
+          const result = await signInWithPopup(auth, provider);
+          const idToken = await result.user.getIdToken();
+          // Get refresh token for auto-refresh capability
+          const refreshToken = result.user.stsTokenManager?.refreshToken || null;
+
+          showStatus('loading', 'Saving credentials...');
+
+          // Send token to local server
+          const response = await fetch('/callback', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              token: idToken,
+              refreshToken: refreshToken,
+              email: result.user.email
+            })
+          });
+
+          if (response.ok) {
+            // Show success screen
+            document.getElementById('loginContent').style.display = 'none';
+            document.getElementById('successContent').classList.add('visible');
+            document.getElementById('emailDisplay').textContent = `Signed in as ${result.user.email}`;
+          } else {
+            throw new Error('Failed to save token');
+          }
+        } catch (error) {
+          console.error(error);
+          showStatus('error', error.message || 'Sign in failed. Please try again.');
+          btn.disabled = false;
+        }
+      };
+    }
+
+    function showStatus(type, message) {
+      const status = document.getElementById('status');
+      status.className = 'status ' + type;
+      status.textContent = message;
+    }
+  </script>
+</body>
+</html>

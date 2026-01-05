@@ -1,0 +1,59 @@
+{
+  "name": "minivibe",
+  "version": "0.2.0",
+  "description": "CLI wrapper for Claude Code with mobile remote control via MiniVibe iOS app",
+  "author": "MiniVibe <hello@minivibeapp.com>",
+  "homepage": "https://github.com/minivibe-app/minivibe",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/minivibe-app/minivibe.git"
+  },
+  "bugs": {
+    "url": "https://github.com/minivibe-app/minivibe/issues"
+  },
+  "main": "vibe.js",
+  "bin": {
+    "vibe": "./vibe.js",
+    "vibe-agent": "./agent/agent.js"
+  },
+  "files": [
+    "vibe.js",
+    "e2e.js",
+    "login.html",
+    "pty-wrapper.py",
+    "pty-wrapper-simple.py",
+    "pty-wrapper-node.js",
+    "agent/",
+    "docs/",
+    "README.md",
+    "GETTING_STARTED.md",
+    "CHANGELOG.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "scripts": {
+    "start": "node vibe.js",
+    "agent": "node agent/agent.js"
+  },
+  "dependencies": {
+    "uuid": "^9.0.0",
+    "ws": "^8.14.2"
+  },
+  "optionalDependencies": {
+    "node-pty": "^1.0.0"
+  },
+  "keywords": [
+    "claude",
+    "claude-code",
+    "cli",
+    "remote",
+    "mobile",
+    "ai",
+    "terminal",
+    "minivibe",
+    "ios"
+  ],
+  "license": "MIT"
+}

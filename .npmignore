@@ -1,0 +1,26 @@
+# Development files
+.git/
+.github/
+.claude/
+.idea/
+.vscode/
+
+# Test files
+test/
+tests/
+*.test.js
+*.spec.js
+coverage/
+
+# Documentation (keep README, LICENSE, CHANGELOG)
+# docs/ is useful, so we include it
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Environment
+.env*
