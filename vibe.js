@@ -16,7 +16,6 @@ const { v4: uuidv4 } = require('uuid');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
-const http = require('http');
 const crypto = require('crypto');
 const e2e = require('./e2e');
 
@@ -43,7 +42,6 @@ function findClaudePath() {
 // Token storage
 const TOKEN_FILE = path.join(os.homedir(), '.vibe', 'token');
 const AUTH_FILE = path.join(os.homedir(), '.vibe', 'auth.json');
-const LOGIN_HTML = path.join(__dirname, 'login.html');
 
 // Firebase web config (public - safe to embed in client code)
 // Update these values from: Firebase Console → Project Settings → Web App
@@ -273,120 +271,6 @@ async function startLoginFlow(openBrowser = true) {
     console.error(`Failed to start login: ${err.message}`);
     process.exit(1);
   }
-}
-
-// Legacy local server login (kept for reference, not used)
-function startLocalLoginFlow() {
-  // Check if Firebase config is set up
-  if (FIREBASE_CONFIG.apiKey === "YOUR_API_KEY") {
-    console.log(`
-Firebase not configured.
-
-Edit vibe.js and update FIREBASE_CONFIG with your Firebase web app values:
-
-const FIREBASE_CONFIG = {
-  apiKey: "your-api-key",
-  authDomain: "your-project.firebaseapp.com",
-  projectId: "your-project-id"
-};
-
-Get these values from:
-1. Firebase Console → Project Settings → General
-2. Scroll to "Your apps" → Web app → Config
-`);
-    process.exit(1);
-  }
-
-  const firebaseConfig = FIREBASE_CONFIG;
-
-  if (!fs.existsSync(LOGIN_HTML)) {
-    console.error(`Login page not found: ${LOGIN_HTML}`);
-    console.error('Make sure login.html is in the vibe-cli directory.');
-    process.exit(1);
-  }
-
-  const loginHtml = fs.readFileSync(LOGIN_HTML, 'utf8');
-
-  // Inject Firebase config into HTML
-  const htmlWithConfig = loginHtml.replace(
-    'window.FIREBASE_CONFIG',
-    `window.FIREBASE_CONFIG = ${JSON.stringify(firebaseConfig)}`
-  );
-
-  const PORT = 9876;
-  let server;
-
-  server = http.createServer((req, res) => {
-    if (req.method === 'GET' && req.url === '/') {
-      res.writeHead(200, { 'Content-Type': 'text/html' });
-      res.end(htmlWithConfig);
-    } else if (req.method === 'POST' && req.url === '/callback') {
-      let body = '';
-      req.on('data', chunk => body += chunk);
-      req.on('end', () => {
-        try {
-          const { token, refreshToken, email } = JSON.parse(body);
-          if (token) {
-            storeAuth(token, refreshToken || null);
-            console.log(`\n✅ Logged in as ${email}`);
-            console.log(`   Auth saved to ${AUTH_FILE}`);
-            if (refreshToken) {
-              console.log(`   Token auto-refresh enabled`);
-            }
-            res.writeHead(200, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ success: true }));
-
-            // Close server after short delay
-            setTimeout(() => {
-              server.close();
-              process.exit(0);
-            }, 500);
-          } else {
-            res.writeHead(400, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ error: 'No token provided' }));
-          }
-        } catch (err) {
-          res.writeHead(400, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ error: err.message }));
-        }
-      });
-    } else {
-      res.writeHead(404);
-      res.end('Not found');
-    }
-  });
-
-  server.listen(PORT, () => {
-    const url = `http://localhost:${PORT}`;
-    console.log(`\nOpening browser for login...`);
-    console.log(`If browser doesn't open, visit: ${url}`);
-    console.log(`\nPress Ctrl+C to cancel.\n`);
-
-    // Open browser based on OS
-    // Windows 'start' needs empty title ("") before URL
-    if (process.platform === 'win32') {
-      exec(`start "" "${url}"`);
-    } else {
-      const openCmd = process.platform === 'darwin' ? 'open' : 'xdg-open';
-      exec(`${openCmd} ${url}`);
-    }
-
-    // Timeout after 5 minutes
-    setTimeout(() => {
-      console.log('\nLogin timed out. Please try again.');
-      server.close();
-      process.exit(1);
-    }, 5 * 60 * 1000);
-  });
-
-  server.on('error', (err) => {
-    if (err.code === 'EADDRINUSE') {
-      console.error(`Port ${PORT} is in use. Close other applications and try again.`);
-    } else {
-      console.error('Server error:', err.message);
-    }
-    process.exit(1);
-  });
 }
 
 // Default bridge URL for headless login
