@@ -19,15 +19,10 @@
   "files": [
     "vibe.js",
     "e2e.js",
-    "login.html",
     "pty-wrapper.py",
-    "pty-wrapper-simple.py",
     "pty-wrapper-node.js",
     "agent/",
-    "docs/",
     "README.md",
-    "GETTING_STARTED.md",
-    "CHANGELOG.md",
     "LICENSE"
   ],
   "engines": {
