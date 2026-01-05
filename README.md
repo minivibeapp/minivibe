@@ -31,8 +31,6 @@ vibe-agent --bridge wss://ws.minivibeapp.com &   # Start agent
 vibe --agent                              # Create sessions
 ```
 
-See [GETTING_STARTED.md](GETTING_STARTED.md) for detailed setup instructions.
-
 ## Installation
 
 ### From npm (Recommended)
@@ -48,8 +46,8 @@ This installs two commands:
 ### From Source
 
 ```bash
-git clone https://github.com/python3isfun/neng.git
-cd neng/vibe-cli
+git clone https://github.com/minivibeapp/minivibe.git
+cd minivibe
 npm install
 npm link
 ```
@@ -130,7 +128,9 @@ vibe "Explain this code"      # With prompt
 | `--agent [url]` | Connect via local vibe-agent (default: auto-discover) |
 | `--name <name>` | Name this session (shown in mobile app) |
 | `--resume <id>` | Resume a previous session (auto-detects directory) |
-| `--attach <id>` | Shortcut for `--agent --resume <id>` |
+| `--attach <id>` | Attach to running session via local agent |
+| `--remote <id>` | Remote control session via bridge (no local Claude needed) |
+| `--list` | List running sessions on local agent |
 | `--login` | Sign in with Google |
 | `--headless` | Use device code flow for headless environments |
 | `--token <token>` | Set Firebase auth token manually |
@@ -145,7 +145,10 @@ vibe "Explain this code"      # With prompt
 | Option | Description |
 |--------|-------------|
 | `--bridge <url>` | Bridge server URL (required) |
-| `--port <port>` | Local WebSocket port (default: 9999) |
+| `--login` | Start device code login flow |
+| `--token <token>` | Use specific Firebase token |
+| `--name <name>` | Set host display name |
+| `--status` | Show current status and exit |
 | `--help, -h` | Show help message |
 
 ## Skip Permissions Mode
