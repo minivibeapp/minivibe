@@ -247,16 +247,20 @@ Make sure vibe-agent is running:
 **Startup checks (in order):**
 1. `--login`, `--logout`, `--help` → handle immediately (no Claude check)
 2. `--remote` mode → skip Claude check (no local Claude needed)
-3. Check Claude installed → error if not
-4. Check auth (unless agent mode) → welcome if not
+3. `--list` mode → skip Claude check (just queries agent)
+4. Check Claude installed → error if not
+5. Check auth (unless agent mode) → welcome if not
 
 | Flags | Claude? | Auth? | Behavior |
 |-------|---------|-------|----------|
 | `--login` | Skip | Skip | Login flow |
 | `--help` | Skip | Skip | Show help |
-| `--remote <id>` | Skip | Required | Connect to bridge |
+| `--logout` | Skip | Skip | Remove auth |
+| `--remote <id>` | Skip | Required | Connect to default bridge |
+| `--list` | Skip | Skip | Query agent (agent has auth) |
 | (none) | Required | Required | Connect to default bridge |
 | `--agent` | Required | Skip | Connect to agent |
+| `--attach <id>` | Required | Skip | Attach via agent |
 | `--bridge URL` | Required | Required | Connect to specified bridge |
 
 ---
@@ -292,8 +296,9 @@ Make sure vibe-agent is running:
 - [ ] Invalid token → prompts re-login
 - [ ] Bridge connection fails → retry with backoff
 
-### Remote Mode (no local Claude)
-- [ ] `vibe --remote <id>` (no Claude installed) → works (no local Claude needed)
+### Modes That Don't Need Local Claude
+- [ ] `vibe --remote <id>` (no Claude installed) → works (controls remote session)
+- [ ] `vibe --list` (no Claude installed) → works (just queries agent)
 
 ---
 

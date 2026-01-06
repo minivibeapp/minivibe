@@ -481,8 +481,9 @@ if (!loginMode) {
   const isAgentMode = !!agentUrl || listSessions;
 
   // 1. --remote mode doesn't need local Claude (controls remote session)
-  // 2. All other modes need Claude installed
-  if (!remoteAttachMode && !checkClaudeInstalled()) {
+  // 2. --list mode doesn't need local Claude (just queries agent)
+  // 3. All other modes need Claude installed
+  if (!remoteAttachMode && !listSessions && !checkClaudeInstalled()) {
     showClaudeNotFoundMessage();
     process.exit(1);
   }
@@ -2179,18 +2180,16 @@ function setupShutdown() {
 // ====================
 
 function remoteAttachMain() {
-  // Validate before displaying banner
+  // Validate before displaying banner (redundant with startup checks, but good failsafe)
   if (!authToken) {
-    console.log('');
-    log('❌ Remote attach requires authentication', colors.red);
-    log('   Run: vibe --login --bridge ' + bridgeUrl, colors.dim);
+    showWelcomeMessage();
     process.exit(1);
   }
 
   if (!resumeSessionId) {
     console.log('');
     log('❌ Remote mode requires a session ID', colors.red);
-    log('   Run: vibe --remote <session-id> --bridge ' + bridgeUrl, colors.dim);
+    log('   Run: vibe --remote <session-id>', colors.dim);
     process.exit(1);
   }
 
