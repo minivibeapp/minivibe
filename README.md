@@ -16,20 +16,18 @@ CLI wrapper for Claude Code with mobile remote control via MiniVibe iOS app.
 ## Quick Start
 
 ```bash
-# Install globally from npm
+# Install
 npm install -g minivibe
 
-# Authenticate (one-time)
-vibe --login              # Desktop (opens browser)
-vibe --login --headless   # Server/EC2 (device code)
+# Login (one-time)
+vibe --login
 
-# Option 1: Direct bridge connection
-vibe --bridge wss://ws.minivibeapp.com
-
-# Option 2: Agent mode (recommended for servers)
-vibe-agent --bridge wss://ws.minivibeapp.com &   # Start agent
-vibe --agent                              # Create sessions
+# Start coding with remote control!
+vibe
+vibe "Fix the bug in main.js"
 ```
+
+> **Note:** For local-only use without remote control, just run `claude` directly.
 
 ## Installation
 
@@ -80,18 +78,19 @@ Get token from MiniVibe iOS app: Settings > Copy Token for CLI.
 
 ## Usage Modes
 
-### Direct Bridge Mode
+### Direct Mode (Default)
 
-Connect directly to the bridge server:
+Just run `vibe` after logging in:
 
 ```bash
-vibe --bridge wss://ws.minivibeapp.com
-vibe --bridge wss://ws.minivibeapp.com "Fix the bug in main.js"
+vibe                      # Start session
+vibe "Fix the bug"        # With initial prompt
+vibe --e2e                # With end-to-end encryption
 ```
 
 ### Agent Mode (Recommended for Servers)
 
-Use a local agent to manage sessions:
+Use a local agent to manage multiple sessions:
 
 ```bash
 # Terminal 1: Start the agent (runs continuously)
@@ -109,34 +108,25 @@ vibe --agent --name "Backend Work"
 - Sessions survive network hiccups
 - Cleaner process management
 
-### Local Mode (No Bridge)
-
-Run without remote control:
-
-```bash
-vibe                          # Interactive
-vibe "Explain this code"      # With prompt
-```
-
 ## Options
 
 ### vibe
 
 | Option | Description |
 |--------|-------------|
-| `--bridge <url>` | Connect to bridge server |
+| `--login` | Sign in with Google |
+| `--headless` | Use device code flow for headless environments |
 | `--agent [url]` | Connect via local vibe-agent (default: auto-discover) |
 | `--name <name>` | Name this session (shown in mobile app) |
 | `--resume <id>` | Resume a previous session (auto-detects directory) |
 | `--attach <id>` | Attach to running session via local agent |
 | `--remote <id>` | Remote control session via bridge (no local Claude needed) |
 | `--list` | List running sessions on local agent |
-| `--login` | Sign in with Google |
-| `--headless` | Use device code flow for headless environments |
+| `--e2e` | Enable end-to-end encryption (auto key exchange with iOS) |
+| `--dangerously-skip-permissions` | Auto-approve all tool executions |
+| `--bridge <url>` | Override bridge URL (default: wss://ws.minivibeapp.com) |
 | `--token <token>` | Set Firebase auth token manually |
 | `--logout` | Remove stored auth token |
-| `--dangerously-skip-permissions` | Auto-approve all tool executions |
-| `--e2e` | Enable end-to-end encryption (auto key exchange with iOS) |
 | `--node-pty` | Use Node.js PTY wrapper (required for Windows) |
 | `--help, -h` | Show help message |
 
@@ -156,7 +146,7 @@ vibe "Explain this code"      # With prompt
 For automated/headless environments where you trust the execution context:
 
 ```bash
-vibe --dangerously-skip-permissions --bridge wss://ws.minivibeapp.com
+vibe --dangerously-skip-permissions
 vibe --dangerously-skip-permissions --agent
 ```
 
@@ -168,7 +158,7 @@ Enable E2E encryption to ensure the bridge server cannot read your message conte
 
 ```bash
 # Start with E2E encryption enabled
-vibe --e2e --bridge wss://ws.minivibeapp.com
+vibe --e2e
 ```
 
 Key exchange happens automatically when both CLI and iOS connect to the bridge:
@@ -207,7 +197,7 @@ Key exchange happens automatically when both CLI and iOS connect to the bridge:
 └─────────────┘     └─────────────┘     └─────────────┘     └─────────────┘
 ```
 
-**Direct mode:** `vibe --bridge` connects directly to bridge server
+**Direct mode:** `vibe` connects directly to bridge server
 
 **Agent mode:** `vibe --agent` connects to local `vibe-agent`, which manages bridge connection
 
@@ -238,7 +228,6 @@ May also need Visual Studio Build Tools and Python for native compilation.
 | Path | Description |
 |------|-------------|
 | `~/.vibe/auth.json` | Stored authentication (token + refresh token) |
-| `~/.vibe/token` | Legacy token file |
 | `~/.vibe/e2e-keys.json` | E2E encryption keypair and peer info |
 | `~/.vibe-agent/port` | Agent port file for auto-discovery |
 

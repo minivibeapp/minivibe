@@ -19,6 +19,49 @@ const os = require('os');
 const crypto = require('crypto');
 const e2e = require('./e2e');
 
+// Check if Claude Code is installed
+function checkClaudeInstalled() {
+  try {
+    execSync('claude --version', { stdio: 'ignore' });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// Show welcome message for first-time users (no auth)
+function showWelcomeMessage() {
+  console.log(`
+Welcome to MiniVibe!
+
+MiniVibe lets you control Claude Code from your iPhone.
+
+To get started:
+  1. Download MiniVibe from the App Store
+  2. Run: vibe --login
+
+For help: vibe --help
+`);
+}
+
+// Show error when Claude Code is not installed
+function showClaudeNotFoundMessage() {
+  console.log(`
+Claude Code not found
+
+MiniVibe requires Claude Code CLI to be installed.
+
+Install Claude Code:
+  https://claude.ai/download
+
+After installing, run:
+  vibe --login
+`);
+}
+
+// Default bridge URL
+const DEFAULT_BRIDGE_URL = 'wss://ws.minivibeapp.com';
+
 // Find claude executable
 function findClaudePath() {
   try {
@@ -303,54 +346,41 @@ let e2eEnabled = false;  // --e2e mode: enable end-to-end encryption
 for (let i = 0; i < args.length; i++) {
   if (args[i] === '--help' || args[i] === '-h') {
     console.log(`
-vibe-cli - Claude Code wrapper with mobile remote control
+vibe - Claude Code with mobile remote control
 
 Usage:
-  vibe "your prompt here"          Start new session with prompt
-  vibe --bridge ws://server:8080   Connect to bridge server
-  vibe --agent                     Connect via local vibe-agent (managed mode)
-  vibe --resume <id>               Resume existing session
-  vibe --attach <id>               Attach to session via local agent (full terminal)
-  vibe --remote <id> --bridge <url>   Remote control session (no local Claude needed)
-  vibe --list                      List running sessions on local agent
-  vibe --login                     Sign in via minivibeapp.com (opens browser)
-  vibe --login --headless          Sign in on headless server (no browser)
-  vibe                             Start interactive session
+  vibe                    Start session (connects to bridge)
+  vibe "prompt"           Start with initial prompt
+  vibe --login            Sign in with Google
+  vibe --agent            Connect via local vibe-agent
 
 Options:
-  --bridge <url>   Connect to bridge server (enables internet access)
-  --agent [url]    Connect via local vibe-agent (default: ws://localhost:9999)
-  --name <name>    Name this session (shown in mobile app)
-  --resume <id>    Resume a previous session (auto-detects correct directory)
-  --attach <id>    Attach via local agent (full terminal passthrough)
-  --remote <id>    Remote control via bridge (no local Claude needed, requires --bridge)
-  --list           List running sessions on local agent
   --login          Sign in via minivibeapp.com (opens browser)
-  --headless       Don't open browser (for servers without display)
+  --headless       Use device code flow for servers (no browser)
+  --agent [url]    Connect via local vibe-agent (default: auto-discover)
+  --name <name>    Name this session (shown in mobile app)
+  --resume <id>    Resume a previous session
+  --e2e            Enable end-to-end encryption
+
+Advanced:
+  --bridge <url>   Override bridge URL (default: wss://ws.minivibeapp.com)
+  --attach <id>    Attach to session via local agent (full terminal)
+  --remote <id>    Remote control session via bridge (no local Claude needed)
+  --list           List running sessions on local agent
   --token <token>  Set Firebase auth token manually
   --logout         Remove stored auth token
-  --node-pty       Use Node.js PTY wrapper (required for Windows, optional for Unix)
-  --dangerously-skip-permissions   Run Claude without permission prompts (use with caution!)
-  --e2e            Enable end-to-end encryption (auto key exchange with iOS)
+  --node-pty       Use Node.js PTY wrapper (required for Windows)
+  --dangerously-skip-permissions   Auto-approve all tool executions
   --help, -h       Show this help message
 
-Attach vs Remote:
-  --attach <id>                    LOCAL: Full terminal passthrough via local vibe-agent
-  --remote <id> --bridge <url>     REMOTE: Chat-style control via bridge server
-                                   - No local agent or Claude Code needed
-                                   - Control sessions running on any host
-
-Authentication:
-  Use --login to sign in via minivibeapp.com (opens browser automatically).
-  Use --login --headless on servers without a display (EC2, etc.)
-
 Examples:
-  vibe --login                                    Sign in (opens minivibeapp.com)
-  vibe --login --headless                         Sign in (prints code for manual entry)
-  vibe --bridge wss://ws.minivibeapp.com                  Connect to bridge
-  vibe --agent                                    Connect via local agent
-  vibe --bridge wss://ws.minivibeapp.com "Fix bug"        With initial prompt
-  vibe --remote abc123 --bridge wss://ws.minivibeapp.com  Remote control session on another host
+  vibe --login            Sign in (one-time setup)
+  vibe                    Start session
+  vibe "Fix the bug"      Start with prompt
+  vibe --e2e              Enable encryption
+  vibe --agent            Use local agent
+
+For local-only use without remote control, run 'claude' directly.
 `);
     process.exit(0);
   } else if (args[i] === '--headless') {
@@ -442,6 +472,38 @@ if (!authToken) {
   authToken = getStoredToken();
 }
 
+// ====================
+// Startup Checks
+// ====================
+
+// Skip checks if in login mode (already handled above)
+if (!loginMode) {
+  const isAgentMode = !!agentUrl || listSessions;
+
+  // 1. --remote mode doesn't need local Claude (controls remote session)
+  // 2. All other modes need Claude installed
+  if (!remoteAttachMode && !checkClaudeInstalled()) {
+    showClaudeNotFoundMessage();
+    process.exit(1);
+  }
+
+  // 3. Check auth (unless agent mode - agent handles its own auth)
+  if (!isAgentMode && !authToken) {
+    showWelcomeMessage();
+    process.exit(1);
+  }
+
+  // 4. Default to bridge URL when authenticated (and not in agent mode)
+  if (!isAgentMode && !bridgeUrl && authToken) {
+    bridgeUrl = DEFAULT_BRIDGE_URL;
+  }
+
+  // 5. --remote without --bridge: use default bridge
+  if (remoteAttachMode && !bridgeUrl) {
+    bridgeUrl = DEFAULT_BRIDGE_URL;
+  }
+}
+
 // Initialize E2E encryption if enabled
 // Track if E2E is pending (enabled but not yet established)
 let e2ePending = false;
@@ -458,20 +520,7 @@ if (e2eEnabled) {
   }
 }
 
-// Validate remote mode requires bridge
-if (remoteAttachMode && !bridgeUrl) {
-  console.error('Error: --remote requires --bridge <url>');
-  console.error('Example: vibe --remote abc123 --bridge wss://ws.minivibeapp.com');
-  process.exit(1);
-}
-
-// Validate E2E requires bridge (for key exchange)
-if (e2ePending && !bridgeUrl && !agentUrl) {
-  console.error('Error: --e2e with no saved peer requires --bridge <url>');
-  console.error('E2E encryption needs a bridge to exchange keys with iOS app.');
-  console.error('Example: vibe --e2e --bridge wss://ws.minivibeapp.com');
-  process.exit(1);
-}
+// Note: E2E key exchange now works automatically since bridge is defaulted when authenticated
 
 // Session state
 const sessionId = resumeSessionId || uuidv4();
@@ -693,13 +742,10 @@ function connectToBridge() {
 
   const isAgentMode = !!agentUrl;
 
-  // Check for auth token when bridge is enabled (not needed for agent mode)
+  // Auth should already be checked in startup, but double-check here
   if (!isAgentMode && !authToken) {
-    log('⚠️  No authentication token found.', colors.yellow);
-    log('   Use --token <token> to set your Firebase token.', colors.dim);
-    log('   Get your token from the MiniVibe mobile app.', colors.dim);
-    log('', '');
-    log('   Continuing without authentication (bridge may reject connection)', colors.dim);
+    showWelcomeMessage();
+    process.exit(1);
   }
 
   if (isAgentMode) {
@@ -765,6 +811,17 @@ function connectToBridge() {
   });
 
   bridgeSocket.on('error', (err) => {
+    if (isAgentMode && err.code === 'ECONNREFUSED') {
+      // Agent not running - show helpful message
+      console.log(`
+Cannot connect to vibe-agent at ${targetUrl}
+
+Make sure vibe-agent is running:
+  vibe-agent --login --bridge wss://ws.minivibeapp.com  # First time
+  vibe-agent --bridge wss://ws.minivibeapp.com          # After login
+`);
+      process.exit(1);
+    }
     logStatus(`Bridge connection error: ${err.message}`);
   });
 }
