@@ -94,7 +94,8 @@ Use a local agent to manage multiple sessions:
 
 ```bash
 # Terminal 1: Start the agent (runs continuously)
-vibe-agent --bridge wss://ws.minivibeapp.com
+vibe-agent --login       # First time only
+vibe-agent               # Start daemon
 
 # Terminal 2+: Create sessions via agent
 vibe --agent
@@ -134,11 +135,11 @@ vibe --agent --name "Backend Work"
 
 | Option | Description |
 |--------|-------------|
-| `--bridge <url>` | Bridge server URL (required) |
-| `--login` | Start device code login flow |
-| `--token <token>` | Use specific Firebase token |
+| `--login` | Sign in via device code flow |
 | `--name <name>` | Set host display name |
 | `--status` | Show current status and exit |
+| `--bridge <url>` | Override bridge URL (default: wss://ws.minivibeapp.com) |
+| `--token <token>` | Use specific Firebase token |
 | `--help, -h` | Show help message |
 
 ## Skip Permissions Mode

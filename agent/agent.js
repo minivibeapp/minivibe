@@ -9,8 +9,8 @@
  * - Stop running sessions
  *
  * Usage:
- *   vibe-agent --bridge wss://ws.minivibeapp.com --token <firebase-token>
- *   vibe-agent --login --bridge wss://ws.minivibeapp.com
+ *   vibe-agent --login    Sign in (one-time)
+ *   vibe-agent            Start agent daemon
  */
 
 const { spawn, execSync } = require('child_process');
@@ -35,6 +35,22 @@ const HEARTBEAT_INTERVAL_MS = 30000;
 const LOCAL_SERVER_PORT = 9999;
 const PORT_FILE = path.join(os.homedir(), '.vibe-agent', 'port');
 const MAX_SESSION_HISTORY_AGE_DAYS = 30;
+const DEFAULT_BRIDGE_URL = 'wss://ws.minivibeapp.com';
+
+// Show welcome message for first-time users (no auth)
+function showWelcomeMessage() {
+  console.log(`
+Welcome to vibe-agent!
+
+vibe-agent lets you manage Claude Code sessions from your iPhone.
+
+To get started:
+  1. Download MiniVibe from the App Store
+  2. Run: vibe-agent --login
+
+For help: vibe-agent --help
+`);
+}
 
 // Colors for terminal output
 const colors = {
@@ -1319,27 +1335,24 @@ function printHelp() {
 ${colors.cyan}${colors.bold}vibe-agent${colors.reset} - Persistent daemon for remote Claude Code sessions
 
 ${colors.bold}Usage:${colors.reset}
-  vibe-agent --bridge <url>              Start agent connected to bridge
-  vibe-agent --login --bridge <url>      Login via device code flow
-  vibe-agent --status                    Show agent status
+  vibe-agent                Start agent daemon
+  vibe-agent --login        Sign in with Google (one-time)
+  vibe-agent --status       Show agent status
 
 ${colors.bold}Options:${colors.reset}
-  --bridge <url>    Bridge server URL (wss://ws.minivibeapp.com)
-  --login           Start device code login flow
-  --token <token>   Use specific Firebase token
+  --login           Sign in via device code flow
   --name <name>     Set host display name
   --status          Show current status and exit
   --help, -h        Show this help
 
+${colors.bold}Advanced:${colors.reset}
+  --bridge <url>    Override bridge URL (default: wss://ws.minivibeapp.com)
+  --token <token>   Use specific Firebase token
+
 ${colors.bold}Examples:${colors.reset}
-  # Login (first time)
-  vibe-agent --login --bridge wss://ws.minivibeapp.com
-
-  # Start agent daemon
-  vibe-agent --bridge wss://ws.minivibeapp.com
-
-  # Start with custom host name
-  vibe-agent --bridge wss://ws.minivibeapp.com --name "AWS Dev Server"
+  vibe-agent --login        Sign in (one-time setup)
+  vibe-agent                Start agent
+  vibe-agent --name "EC2"   Start with custom name
 `);
 }
 
@@ -1397,7 +1410,7 @@ async function main() {
   // Load saved config
   const config = loadConfig();
 
-  bridgeUrl = options.bridge || config.bridgeUrl;
+  bridgeUrl = options.bridge || config.bridgeUrl || DEFAULT_BRIDGE_URL;
   hostName = options.name || config.hostName || os.hostname();
   agentId = config.agentId || null;  // Load persisted agentId
 
@@ -1410,7 +1423,7 @@ async function main() {
   }
 
   // Save config for next time
-  if (bridgeUrl) {
+  if (options.bridge) {
     config.bridgeUrl = bridgeUrl;
   }
   if (options.name) {
@@ -1420,7 +1433,7 @@ async function main() {
 
   // Status check
   if (options.status) {
-    console.log(`Bridge URL: ${bridgeUrl || 'Not configured'}`);
+    console.log(`Bridge URL: ${bridgeUrl}`);
     console.log(`Host Name:  ${hostName}`);
     console.log(`Auth Token: ${authToken ? 'Configured' : 'Not configured'}`);
     console.log(`Agent ID:   ${agentId || 'Will be assigned on first connect'}`);
@@ -1429,23 +1442,15 @@ async function main() {
 
   // Login flow
   if (options.login) {
-    if (!bridgeUrl) {
-      log('--bridge URL required for login', colors.red);
-      process.exit(1);
-    }
     const httpUrl = bridgeUrl.replace('wss://', 'https://').replace('ws://', 'http://');
     await startHeadlessLogin(httpUrl);
     return;
   }
 
-  // Validate requirements
-  if (!bridgeUrl) {
-    log('No bridge URL. Run: vibe-agent --bridge wss://ws.minivibeapp.com', colors.red);
-    process.exit(1);
-  }
-
+  // Require auth (block instead of warn)
   if (!authToken) {
-    log('No auth token. Run: vibe-agent --login --bridge <url>', colors.yellow);
+    showWelcomeMessage();
+    process.exit(1);
   }
 
   // Banner
