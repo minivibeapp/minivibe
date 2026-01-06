@@ -241,9 +241,10 @@ const localClients = new Map();
 // ====================
 
 function connect() {
+  // Bridge URL should always be set (defaults to DEFAULT_BRIDGE_URL)
   if (!bridgeUrl) {
-    log('No bridge URL configured', colors.red);
-    return;
+    log('No bridge URL configured (this should not happen)', colors.red);
+    process.exit(1);
   }
 
   log(`Connecting to ${bridgeUrl}...`, colors.cyan);
@@ -260,11 +261,13 @@ function connect() {
     log('Connected to bridge', colors.green);
     clearTimeout(reconnectTimer);
 
-    // Authenticate
+    // Authenticate (auth is required, so this should always be true)
     if (authToken) {
       send({ type: 'authenticate', token: authToken });
     } else {
-      log('No auth token - run: vibe-agent --login', colors.yellow);
+      // Failsafe - should not reach here due to startup check
+      showWelcomeMessage();
+      process.exit(1);
     }
   });
 

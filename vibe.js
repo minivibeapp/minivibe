@@ -818,8 +818,8 @@ function connectToBridge() {
 Cannot connect to vibe-agent at ${targetUrl}
 
 Make sure vibe-agent is running:
-  vibe-agent --login --bridge wss://ws.minivibeapp.com  # First time
-  vibe-agent --bridge wss://ws.minivibeapp.com          # After login
+  vibe-agent --login   # First time
+  vibe-agent           # Start daemon
 `);
       process.exit(1);
     }
