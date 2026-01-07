@@ -316,9 +316,6 @@ async function startLoginFlow(openBrowser = true) {
   }
 }
 
-// Default bridge URL for headless login
-const DEFAULT_BRIDGE_URL = 'wss://ws.minivibeapp.com';
-
 // Production web app URL for device pairing
 const WEB_APP_URL = 'https://minivibeapp.com';
 
