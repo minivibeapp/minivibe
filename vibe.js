@@ -428,23 +428,35 @@ For local-only use without remote control, run 'claude' directly.
     console.log('Token stored successfully');
     i++;
   } else if (args[i] === '--logout') {
-    try {
-      let loggedOut = false;
-      if (fs.existsSync(AUTH_FILE)) {
+    let loggedOut = false;
+    let errors = [];
+
+    // Try to delete AUTH_FILE
+    if (fs.existsSync(AUTH_FILE)) {
+      try {
         fs.unlinkSync(AUTH_FILE);
         loggedOut = true;
+      } catch (err) {
+        errors.push(`auth.json: ${err.message}`);
       }
-      if (fs.existsSync(TOKEN_FILE)) {
+    }
+
+    // Try to delete TOKEN_FILE regardless of first result
+    if (fs.existsSync(TOKEN_FILE)) {
+      try {
         fs.unlinkSync(TOKEN_FILE);
         loggedOut = true;
+      } catch (err) {
+        errors.push(`token: ${err.message}`);
       }
-      if (loggedOut) {
-        console.log('Logged out successfully');
-      } else {
-        console.log('Not logged in');
-      }
-    } catch (err) {
-      console.error('Logout failed:', err.message);
+    }
+
+    if (errors.length > 0) {
+      console.error('Logout partially failed:', errors.join(', '));
+    } else if (loggedOut) {
+      console.log('Logged out successfully');
+    } else {
+      console.log('Not logged in');
     }
     process.exit(0);
   } else if (args[i] === '--node-pty') {

@@ -1340,10 +1340,12 @@ ${colors.cyan}${colors.bold}vibe-agent${colors.reset} - Persistent daemon for re
 ${colors.bold}Usage:${colors.reset}
   vibe-agent                Start agent daemon
   vibe-agent --login        Sign in with Google (one-time)
+  vibe-agent --logout       Sign out and clear credentials
   vibe-agent --status       Show agent status
 
 ${colors.bold}Options:${colors.reset}
   --login           Sign in via device code flow
+  --logout          Sign out and clear saved credentials
   --name <name>     Set host display name
   --status          Show current status and exit
   --help, -h        Show this help
@@ -1365,6 +1367,7 @@ function parseArgs() {
     bridge: null,
     token: null,
     login: false,
+    logout: false,
     name: null,
     status: false,
     help: false
@@ -1381,6 +1384,9 @@ function parseArgs() {
         break;
       case '--login':
         options.login = true;
+        break;
+      case '--logout':
+        options.logout = true;
         break;
       case '--name':
         options.name = args[++i];
@@ -1440,6 +1446,21 @@ async function main() {
     console.log(`Host Name:  ${hostName}`);
     console.log(`Auth Token: ${authToken ? 'Configured' : 'Not configured'}`);
     console.log(`Agent ID:   ${agentId || 'Will be assigned on first connect'}`);
+    process.exit(0);
+  }
+
+  // Logout flow
+  if (options.logout) {
+    try {
+      if (fs.existsSync(AUTH_FILE)) {
+        fs.unlinkSync(AUTH_FILE);
+        log('Logged out successfully', colors.green);
+      } else {
+        log('Not logged in', colors.yellow);
+      }
+    } catch (err) {
+      log(`Logout failed: ${err.message}`, colors.red);
+    }
     process.exit(0);
   }
 
