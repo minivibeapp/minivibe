@@ -429,8 +429,16 @@ For local-only use without remote control, run 'claude' directly.
     i++;
   } else if (args[i] === '--logout') {
     try {
+      let loggedOut = false;
+      if (fs.existsSync(AUTH_FILE)) {
+        fs.unlinkSync(AUTH_FILE);
+        loggedOut = true;
+      }
       if (fs.existsSync(TOKEN_FILE)) {
         fs.unlinkSync(TOKEN_FILE);
+        loggedOut = true;
+      }
+      if (loggedOut) {
         console.log('Logged out successfully');
       } else {
         console.log('Not logged in');
