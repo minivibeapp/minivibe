@@ -36,6 +36,7 @@ const LOCAL_SERVER_PORT = 9999;
 const PORT_FILE = path.join(os.homedir(), '.vibe-agent', 'port');
 const MAX_SESSION_HISTORY_AGE_DAYS = 30;
 const DEFAULT_BRIDGE_URL = 'wss://ws.minivibeapp.com';
+const PAIRING_URL = 'https://minivibeapp.com/pair';
 
 // Show welcome message for first-time users (no auth)
 function showWelcomeMessage() {
@@ -1282,7 +1283,7 @@ ${'='.repeat(40)}
 
     const { deviceId, code, expiresIn } = await codeRes.json();
 
-    console.log(`   Visit:  ${bridgeHttpUrl}/device`);
+    console.log(`   Visit:  ${PAIRING_URL}`);
     console.log(`   Code:   ${colors.bold}${code}${colors.reset}`);
     console.log('');
     console.log(`   Code expires in ${Math.floor(expiresIn / 60)} minutes.`);
