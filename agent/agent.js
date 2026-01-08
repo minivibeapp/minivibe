@@ -51,10 +51,10 @@ vibe-agent lets you manage Claude Code sessions from your iPhone.
 
 To get started:
   1. Download MiniVibe from the App Store
-  2. Run: vibe-agent --login
-     (or 'vibe --login' - auth is shared between vibe and vibe-agent)
+  2. Run: vibe-agent login
+     (or 'vibe login' - auth is shared between vibe and vibe-agent)
 
-For help: vibe-agent --help
+For help: vibe-agent help
 `);
 }
 
@@ -1345,30 +1345,44 @@ ${colors.cyan}${colors.bold}vibe-agent${colors.reset} - Persistent daemon for re
 
 ${colors.bold}Usage:${colors.reset}
   vibe-agent                Start agent daemon
-  vibe-agent --login        Sign in with Google (one-time)
-  vibe-agent --logout       Sign out and clear credentials
-  vibe-agent --status       Show agent status
+  vibe-agent login          Sign in with Google (one-time)
+  vibe-agent logout         Sign out and clear credentials
+  vibe-agent status         Show agent status
+
+${colors.bold}Commands:${colors.reset}
+  login             Sign in via device code flow
+  logout            Sign out and clear saved credentials
+  status            Show current status and exit
+  help              Show this help
 
 ${colors.bold}Options:${colors.reset}
-  --login           Sign in via device code flow
-  --logout          Sign out and clear saved credentials
   --name <name>     Set host display name
-  --status          Show current status and exit
-  --help, -h        Show this help
-
-${colors.bold}Advanced:${colors.reset}
   --bridge <url>    Override bridge URL (default: wss://ws.minivibeapp.com)
   --token <token>   Use specific Firebase token
 
 ${colors.bold}Examples:${colors.reset}
-  vibe-agent --login        Sign in (one-time setup)
+  vibe-agent login          Sign in (one-time setup)
   vibe-agent                Start agent
   vibe-agent --name "EC2"   Start with custom name
 `);
 }
 
 function parseArgs() {
-  const args = process.argv.slice(2);
+  const rawArgs = process.argv.slice(2);
+
+  // Support subcommand style (vibe-agent login) alongside flag style (vibe-agent --login)
+  const subcommands = {
+    'login': '--login',
+    'logout': '--logout',
+    'status': '--status',
+    'help': '--help'
+  };
+
+  // Transform first arg if it's a subcommand
+  const args = rawArgs.length > 0 && subcommands[rawArgs[0]]
+    ? [subcommands[rawArgs[0]], ...rawArgs.slice(1)]
+    : rawArgs;
+
   const options = {
     bridge: null,
     token: null,

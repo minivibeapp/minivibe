@@ -326,7 +326,21 @@ async function startHeadlessLogin() {
 }
 
 // Parse arguments
-const args = process.argv.slice(2);
+const rawArgs = process.argv.slice(2);
+
+// Support subcommand style (vibe login) alongside flag style (vibe --login)
+const subcommands = {
+  'login': '--login',
+  'logout': '--logout',
+  'status': '--status',
+  'help': '--help'
+};
+
+// Transform first arg if it's a subcommand
+const args = rawArgs.length > 0 && subcommands[rawArgs[0]]
+  ? [subcommands[rawArgs[0]], ...rawArgs.slice(1)]
+  : rawArgs;
+
 let initialPrompt = null;
 let resumeSessionId = null;
 let bridgeUrl = null;
@@ -348,11 +362,15 @@ vibe - Claude Code with mobile remote control
 Usage:
   vibe                    Start session (connects to bridge)
   vibe "prompt"           Start with initial prompt
-  vibe --login            Sign in with Google
-  vibe --agent            Connect via local vibe-agent
+  vibe login              Sign in with Google
+  vibe logout             Sign out
+
+Commands:
+  login            Sign in via minivibeapp.com (opens browser)
+  logout           Sign out and remove stored auth
+  help             Show this help message
 
 Options:
-  --login          Sign in via minivibeapp.com (opens browser)
   --headless       Use device code flow for servers (no browser)
   --agent [url]    Connect via local vibe-agent (default: auto-discover)
   --name <name>    Name this session (shown in mobile app)
@@ -365,13 +383,12 @@ Advanced:
   --remote <id>    Remote control session via bridge (no local Claude needed)
   --list           List running sessions on local agent
   --token <token>  Set Firebase auth token manually
-  --logout         Remove stored auth token
   --node-pty       Use Node.js PTY wrapper (required for Windows)
   --dangerously-skip-permissions   Auto-approve all tool executions
   --help, -h       Show this help message
 
 Examples:
-  vibe --login            Sign in (one-time setup)
+  vibe login              Sign in (one-time setup)
   vibe                    Start session
   vibe "Fix the bug"      Start with prompt
   vibe --e2e              Enable encryption
