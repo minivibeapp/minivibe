@@ -25,9 +25,13 @@ const os = require('os');
 // Configuration
 // ====================
 
+// Shared auth directory (same as vibe CLI)
+const SHARED_AUTH_DIR = path.join(os.homedir(), '.vibe');
+const AUTH_FILE = path.join(SHARED_AUTH_DIR, 'auth.json');
+
+// Agent-specific config directory
 const CONFIG_DIR = path.join(os.homedir(), '.vibe-agent');
 const CONFIG_FILE = path.join(CONFIG_DIR, 'config.json');
-const AUTH_FILE = path.join(CONFIG_DIR, 'auth.json');
 const SESSION_HISTORY_FILE = path.join(CONFIG_DIR, 'session-history.json');
 
 const RECONNECT_DELAY_MS = 5000;
@@ -48,6 +52,7 @@ vibe-agent lets you manage Claude Code sessions from your iPhone.
 To get started:
   1. Download MiniVibe from the App Store
   2. Run: vibe-agent --login
+     (or 'vibe --login' - auth is shared between vibe and vibe-agent)
 
 For help: vibe-agent --help
 `);
@@ -112,8 +117,8 @@ function loadAuth() {
 
 function saveAuth(idToken, refreshToken = null) {
   try {
-    if (!fs.existsSync(CONFIG_DIR)) {
-      fs.mkdirSync(CONFIG_DIR, { recursive: true });
+    if (!fs.existsSync(SHARED_AUTH_DIR)) {
+      fs.mkdirSync(SHARED_AUTH_DIR, { recursive: true });
     }
     const data = { idToken, refreshToken, updatedAt: new Date().toISOString() };
     fs.writeFileSync(AUTH_FILE, JSON.stringify(data, null, 2), 'utf8');
