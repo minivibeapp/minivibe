@@ -20,7 +20,7 @@ CLI wrapper for Claude Code with mobile remote control via MiniVibe iOS app.
 npm install -g minivibe
 
 # Login (one-time)
-vibe --login
+vibe login
 
 # Start coding with remote control!
 vibe
@@ -55,7 +55,7 @@ npm link
 ### Browser Login (Desktop)
 
 ```bash
-vibe --login
+vibe login
 ```
 
 Opens browser for Google sign-in. Token is saved to `~/.vibe/auth.json`.
@@ -63,7 +63,7 @@ Opens browser for Google sign-in. Token is saved to `~/.vibe/auth.json`.
 ### Headless Login (Servers/EC2)
 
 ```bash
-vibe --login --headless
+vibe login --headless
 ```
 
 Displays a device code. Visit the URL on any device to authenticate.
@@ -94,7 +94,7 @@ Use a local agent to manage multiple sessions:
 
 ```bash
 # Terminal 1: Start the agent (runs continuously)
-vibe-agent --login       # First time only
+vibe-agent login         # First time only
 vibe-agent               # Start daemon
 
 # Terminal 2+: Create sessions via agent
