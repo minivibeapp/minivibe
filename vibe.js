@@ -38,9 +38,9 @@ MiniVibe lets you control Claude Code from your iPhone.
 
 To get started:
   1. Download MiniVibe from the App Store
-  2. Run: vibe --login
+  2. Run: vibe login
 
-For help: vibe --help
+For help: vibe help
 `);
 }
 
@@ -55,7 +55,7 @@ Install Claude Code:
   https://claude.ai/download
 
 After installing, run:
-  vibe --login
+  vibe login
 `);
 }
 
@@ -852,7 +852,7 @@ function connectToBridge() {
 Cannot connect to vibe-agent at ${targetUrl}
 
 Make sure vibe-agent is running:
-  vibe-agent --login   # First time
+  vibe-agent login     # First time
   vibe-agent           # Start daemon
 `);
       process.exit(1);
@@ -981,7 +981,7 @@ function handleBridgeMessage(msg) {
           log('║  Your token is invalid or expired.        ║', colors.red);
           log('║  Please re-login:                          ║', colors.red);
           log('║                                            ║', colors.red);
-          log('║    vibe --login                            ║', colors.red);
+          log('║    vibe login                              ║', colors.red);
           log('║                                            ║', colors.red);
           log('╚════════════════════════════════════════════╝', colors.red);
           log('', colors.red);
@@ -1472,7 +1472,7 @@ function handleBridgeMessage(msg) {
         log(`║  ${(msg.message || 'Invalid token').padEnd(42)}║`, colors.red);
         log('║                                            ║', colors.red);
         log('║  Please re-login:                          ║', colors.red);
-        log('║    vibe --login                            ║', colors.red);
+        log('║    vibe login                              ║', colors.red);
         log('║                                            ║', colors.red);
         log('╚════════════════════════════════════════════╝', colors.red);
         log('', colors.red);
@@ -2300,7 +2300,7 @@ function handleRemoteAttachMessage(msg) {
 
     case 'auth_error':
       log(`✗ Authentication failed: ${msg.message}`, colors.red);
-      log('  Run: vibe --login --bridge ' + bridgeUrl, colors.dim);
+      log('  Run: vibe login --bridge ' + bridgeUrl, colors.dim);
       process.exit(1);
       break;
 

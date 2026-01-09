@@ -9,7 +9,7 @@
  * - Stop running sessions
  *
  * Usage:
- *   vibe-agent --login    Sign in (one-time)
+ *   vibe-agent login      Sign in (one-time)
  *   vibe-agent            Start agent daemon
  */
 
@@ -736,7 +736,7 @@ function handleMessage(msg) {
           authToken = newToken;
           send({ type: 'authenticate', token: newToken });
         } else {
-          log('Please re-login: vibe-agent --login', colors.red);
+          log('Please re-login: vibe-agent login', colors.red);
         }
       })();
       break;
