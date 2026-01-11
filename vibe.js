@@ -362,7 +362,7 @@ vibe - Claude Code with mobile remote control
 Usage:
   vibe                    Start session (connects to bridge)
   vibe "prompt"           Start with initial prompt
-  vibe login              Sign in with Google
+  vibe login              Sign in (Apple or Google)
   vibe logout             Sign out
 
 Commands:

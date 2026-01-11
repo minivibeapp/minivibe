@@ -1345,7 +1345,7 @@ ${colors.cyan}${colors.bold}vibe-agent${colors.reset} - Persistent daemon for re
 
 ${colors.bold}Usage:${colors.reset}
   vibe-agent                Start agent daemon
-  vibe-agent login          Sign in with Google (one-time)
+  vibe-agent login          Sign in (one-time)
   vibe-agent logout         Sign out and clear credentials
   vibe-agent status         Show agent status
 
