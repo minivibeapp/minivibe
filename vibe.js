@@ -558,7 +558,11 @@ if (e2eEnabled) {
 // Note: E2E key exchange now works automatically since bridge is defaulted when authenticated
 
 // Session state
+// Support VIBE_SESSION_ID env var for fixed session IDs (e.g., playground)
+// Bridge session ID can be any string, but Claude needs a valid UUID
+const bridgeSessionId = process.env.VIBE_SESSION_ID;
 const sessionId = resumeSessionId || uuidv4();
+const effectiveSessionId = bridgeSessionId || sessionId;  // Use for bridge registration
 let claudeProcess = null;
 let isRunning = false;
 let isShuttingDown = false;
@@ -928,7 +932,7 @@ function handleBridgeMessage(msg) {
       // This is required before E2E key exchange so our keys can reach viewers
       bridgeSocket.send(JSON.stringify({
         type: 'register_session',
-        sessionId,
+        sessionId: effectiveSessionId,  // Use VIBE_SESSION_ID if set for fixed playground IDs
         path: process.cwd(),
         name: sessionName || path.basename(process.cwd()),  // Use --name or fallback to directory name
         e2e: e2eEnabled  // Indicate if this session has E2E enabled
@@ -942,7 +946,7 @@ function handleBridgeMessage(msg) {
       // Must be AFTER register_session so our type is 'provider' and keys reach viewers
       if (e2eEnabled && e2e.isEnabled()) {
         const keyExchangeMsg = e2e.createKeyExchangeMessage(true);  // needsResponse=true
-        keyExchangeMsg.sessionId = sessionId;  // Include sessionId for routing
+        keyExchangeMsg.sessionId = effectiveSessionId;  // Include sessionId for routing
         bridgeSocket.send(JSON.stringify(keyExchangeMsg));
         log('[E2E] Sent public key to bridge (waiting for peer)', colors.cyan);
       }
@@ -1042,7 +1046,7 @@ function handleBridgeMessage(msg) {
         if (!msg.data || msg.data.length === 0 || !msg.fileName) {
           sendToBridge({
             type: 'error',
-            sessionId: sessionId,
+            sessionId: effectiveSessionId,
             message: 'Invalid file upload: missing data or fileName'
           });
           break;
@@ -1053,7 +1057,7 @@ function handleBridgeMessage(msg) {
         if (msg.data.length > MAX_BASE64_SIZE) {
           sendToBridge({
             type: 'error',
-            sessionId: sessionId,
+            sessionId: effectiveSessionId,
             message: 'File too large (max 10MB)'
           });
           break;
@@ -1147,7 +1151,7 @@ function handleBridgeMessage(msg) {
           // Echo the message back using claude_message type (matches iOS handler)
           sendToBridge({
             type: 'claude_message',
-            sessionId: sessionId,
+            sessionId: effectiveSessionId,
             message: {
               id: uuidv4(),
               sender: 'user',
@@ -1167,7 +1171,7 @@ function handleBridgeMessage(msg) {
           // Also send file_received confirmation
           sendToBridge({
             type: 'file_received',
-            sessionId: sessionId,
+            sessionId: effectiveSessionId,
             fileName: safeName,
             localPath: filePath,
             size: fileBuffer.length
@@ -1177,7 +1181,7 @@ function handleBridgeMessage(msg) {
           log(`❌ Failed to save file: ${err.message}`, colors.red);
           sendToBridge({
             type: 'error',
-            sessionId: sessionId,
+            sessionId: effectiveSessionId,
             message: `Failed to upload file: ${err.message}`
           });
         }
@@ -1192,7 +1196,7 @@ function handleBridgeMessage(msg) {
         if (!msg.images || !Array.isArray(msg.images) || msg.images.length === 0) {
           sendToBridge({
             type: 'error',
-            sessionId: sessionId,
+            sessionId: effectiveSessionId,
             message: 'Invalid file upload: missing or empty images array'
           });
           break;
@@ -1204,7 +1208,7 @@ function handleBridgeMessage(msg) {
         if (totalBase64Size > MAX_TOTAL_BASE64_SIZE) {
           sendToBridge({
             type: 'error',
-            sessionId: sessionId,
+            sessionId: effectiveSessionId,
             message: 'Total file size too large (max 50MB combined)'
           });
           break;
@@ -1319,7 +1323,7 @@ function handleBridgeMessage(msg) {
           // Echo the message back with attachments array
           sendToBridge({
             type: 'claude_message',
-            sessionId: sessionId,
+            sessionId: effectiveSessionId,
             message: {
               id: uuidv4(),
               sender: 'user',
@@ -1332,7 +1336,7 @@ function handleBridgeMessage(msg) {
           // Send confirmation
           sendToBridge({
             type: 'files_received',
-            sessionId: sessionId,
+            sessionId: effectiveSessionId,
             count: savedFiles.length,
             files: savedFiles.map(f => ({ fileName: f.name, localPath: f.path }))
           });
@@ -1343,7 +1347,7 @@ function handleBridgeMessage(msg) {
           log(`❌ Failed to process files: ${err.message}`, colors.red);
           sendToBridge({
             type: 'error',
-            sessionId: sessionId,
+            sessionId: effectiveSessionId,
             message: `Failed to upload files: ${err.message}`
           });
         }
@@ -1867,7 +1871,7 @@ function processSessionMessage(msg) {
 
     sendToBridge({
       type: 'permission_request',
-      sessionId: sessionId,
+      sessionId: effectiveSessionId,
       requestId: tool.id,
       command: tool.name,
       question: question,
@@ -1958,7 +1962,7 @@ function processSessionMessage(msg) {
     const usage = msg.message.usage;
     sendToBridge({
       type: 'token_usage',
-      sessionId: sessionId,
+      sessionId: effectiveSessionId,
       model: msg.message.model || null,
       usage: {
         input_tokens: usage.input_tokens || 0,
@@ -2455,7 +2459,7 @@ function setupRemoteAttachInput() {
       if (pendingPermission) {
         sendRemoteCommand({
           type: 'approve_permission',
-          sessionId: sessionId,
+          sessionId: effectiveSessionId,
           requestId: pendingPermission.id
         });
         log('Sent approval', colors.green);
@@ -2467,7 +2471,7 @@ function setupRemoteAttachInput() {
       if (pendingPermission) {
         sendRemoteCommand({
           type: 'deny_permission',
-          sessionId: sessionId,
+          sessionId: effectiveSessionId,
           requestId: pendingPermission.id
         });
         log('Sent denial', colors.yellow);
@@ -2503,7 +2507,7 @@ function setupRemoteAttachInput() {
       // Send message to Claude
       sendRemoteCommand({
         type: 'send_message',
-        sessionId: sessionId,
+        sessionId: effectiveSessionId,
         content: input
       });
       log(`📤 Sent: ${truncateText(input, 50)}`, colors.dim);
