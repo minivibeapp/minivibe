@@ -353,6 +353,7 @@ let skipPermissions = false;  // --dangerously-skip-permissions mode
 let listSessions = false;    // --list mode: list running sessions
 let remoteAttachMode = false;  // --remote with --bridge: pure remote control (no local Claude)
 let e2eEnabled = false;  // --e2e mode: enable end-to-end encryption
+let verboseMode = false;  // --verbose mode: show [vibe] debug messages
 
 for (let i = 0; i < args.length; i++) {
   if (args[i] === '--help' || args[i] === '-h') {
@@ -376,6 +377,7 @@ Options:
   --name <name>    Name this session (shown in mobile app)
   --resume <id>    Resume a previous session
   --e2e            Enable end-to-end encryption
+  --verbose, -v    Show detailed [vibe] status messages
 
 Advanced:
   --bridge <url>   Override bridge URL (default: wss://ws.minivibeapp.com)
@@ -399,6 +401,8 @@ For local-only use without remote control, run 'claude' directly.
     process.exit(0);
   } else if (args[i] === '--headless') {
     headlessMode = true;
+  } else if (args[i] === '--verbose' || args[i] === '-v') {
+    verboseMode = true;
   } else if (args[i] === '--login') {
     // Defer login handling until we know if --headless is also present
     // Will be handled after the loop
@@ -604,6 +608,9 @@ function logStderr(msg, color = '') {
 }
 
 function logStatus(msg) {
+  // Only log status messages in verbose mode
+  if (!verboseMode) return;
+
   // Use stderr when Claude is running to avoid corrupting PTY output
   if (isRunning) {
     logStderr(`[vibe] ${msg}`, colors.dim);
