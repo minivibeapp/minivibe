@@ -38,6 +38,8 @@ const RECONNECT_DELAY_MS = 5000;
 const HEARTBEAT_INTERVAL_MS = 30000;
 const LOCAL_SERVER_PORT = 9999;
 const PORT_FILE = path.join(os.homedir(), '.vibe-agent', 'port');
+const PID_FILE = path.join(os.homedir(), '.vibe-agent', 'pid');
+const START_TIME_FILE = path.join(os.homedir(), '.vibe-agent', 'start_time');
 const MAX_SESSION_HISTORY_AGE_DAYS = 30;
 const DEFAULT_BRIDGE_URL = 'wss://ws.minivibeapp.com';
 const PAIRING_URL = 'https://minivibeapp.com/pair';
@@ -358,6 +360,13 @@ function startLocalServer() {
       } catch (err) {
         // Ignore
       }
+      // Write PID and start time for status command
+      try {
+        fs.writeFileSync(PID_FILE, process.pid.toString(), 'utf8');
+        fs.writeFileSync(START_TIME_FILE, Date.now().toString(), 'utf8');
+      } catch (err) {
+        // Ignore
+      }
     });
 
     localServer.on('connection', (clientWs) => {
@@ -450,10 +459,16 @@ function stopLocalServer() {
     localServer.close();
     localServer = null;
   }
-  // Remove port file
+  // Remove port, PID, and start time files
   try {
     if (fs.existsSync(PORT_FILE)) {
       fs.unlinkSync(PORT_FILE);
+    }
+    if (fs.existsSync(PID_FILE)) {
+      fs.unlinkSync(PID_FILE);
+    }
+    if (fs.existsSync(START_TIME_FILE)) {
+      fs.unlinkSync(START_TIME_FILE);
     }
   } catch (err) {
     // Ignore
@@ -1462,10 +1477,113 @@ async function main() {
 
   // Status check
   if (options.status) {
-    console.log(`Bridge URL: ${bridgeUrl}`);
-    console.log(`Host Name:  ${hostName}`);
-    console.log(`Auth Token: ${authToken ? 'Configured' : 'Not configured'}`);
-    console.log(`Agent ID:   ${agentId || 'Will be assigned on first connect'}`);
+    console.log(`${colors.cyan}${colors.bold}vibe-agent${colors.reset}`);
+    console.log();
+
+    // Check if agent is running
+    let isRunning = false;
+    let pid = null;
+    let uptime = null;
+
+    try {
+      if (fs.existsSync(PID_FILE)) {
+        pid = parseInt(fs.readFileSync(PID_FILE, 'utf8').trim(), 10);
+        // Check if process is actually running
+        try {
+          process.kill(pid, 0); // Signal 0 just checks if process exists
+          isRunning = true;
+
+          // Calculate uptime
+          if (fs.existsSync(START_TIME_FILE)) {
+            const startTime = parseInt(fs.readFileSync(START_TIME_FILE, 'utf8').trim(), 10);
+            const uptimeMs = Date.now() - startTime;
+            // Only show uptime if it's positive and reasonable
+            if (uptimeMs > 0 && !isNaN(startTime)) {
+              const hours = Math.floor(uptimeMs / (1000 * 60 * 60));
+              const minutes = Math.floor((uptimeMs % (1000 * 60 * 60)) / (1000 * 60));
+              uptime = hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`;
+            }
+          }
+        } catch (err) {
+          // Process not running, stale PID file
+          isRunning = false;
+        }
+      }
+    } catch (err) {
+      // Ignore
+    }
+
+    // Get active session count by connecting to local server
+    let sessionCount = null;
+    if (isRunning && fs.existsSync(PORT_FILE)) {
+      try {
+        const portStr = fs.readFileSync(PORT_FILE, 'utf8').trim();
+        const port = parseInt(portStr, 10);
+
+        if (!isNaN(port) && port > 0) {
+          // Quick check via local WebSocket
+          const checkPromise = new Promise((resolve) => {
+            const checkWs = new WebSocket(`ws://localhost:${port}`);
+            const timeout = setTimeout(() => {
+              try { checkWs.close(); } catch {}
+              resolve(null);
+            }, 1000);
+
+            checkWs.on('open', () => {
+              checkWs.send(JSON.stringify({ type: 'list_sessions' }));
+            });
+
+            checkWs.on('message', (data) => {
+              try {
+                const msg = JSON.parse(data.toString());
+                if (msg.type === 'sessions_list') {
+                  clearTimeout(timeout);
+                  resolve(msg.sessions?.length || 0);
+                  try { checkWs.close(); } catch {}
+                }
+              } catch (err) {
+                // Ignore
+              }
+            });
+
+            checkWs.on('error', () => {
+              clearTimeout(timeout);
+              resolve(null);
+            });
+
+            checkWs.on('close', () => {
+              clearTimeout(timeout);
+            });
+          });
+
+          sessionCount = await checkPromise;
+        }
+      } catch (err) {
+        // Ignore
+      }
+    }
+
+    // Display status
+    if (isRunning) {
+      console.log(`Status:     ${colors.green}running${colors.reset} (pid ${pid})`);
+      if (uptime) {
+        console.log(`Uptime:     ${uptime}`);
+      }
+    } else {
+      console.log(`Status:     ${colors.dim}not running${colors.reset}`);
+    }
+
+    console.log(`Host:       ${hostName}`);
+    console.log(`Bridge:     ${bridgeUrl}`);
+
+    if (sessionCount !== null) {
+      console.log(`Sessions:   ${sessionCount} active`);
+    }
+
+    console.log();
+    console.log(`Auth:       ${authToken ? colors.green + 'configured' + colors.reset : colors.yellow + 'not configured' + colors.reset}`);
+    console.log(`Agent ID:   ${agentId || colors.dim + 'will be assigned on first connect' + colors.reset}`);
+
     process.exit(0);
   }
 

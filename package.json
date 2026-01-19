@@ -30,7 +30,9 @@
   },
   "scripts": {
     "start": "node vibe.js",
-    "agent": "node agent/agent.js"
+    "agent": "node agent/agent.js",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "uuid": "^9.0.0",
@@ -50,5 +52,8 @@
     "minivibe",
     "ios"
   ],
-  "license": "MIT"
+  "license": "MIT",
+  "devDependencies": {
+    "vitest": "^4.0.17"
+  }
 }

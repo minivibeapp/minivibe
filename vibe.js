@@ -336,10 +336,32 @@ const subcommands = {
   'help': '--help'
 };
 
-// Transform first arg if it's a subcommand
-const args = rawArgs.length > 0 && subcommands[rawArgs[0]]
-  ? [subcommands[rawArgs[0]], ...rawArgs.slice(1)]
-  : rawArgs;
+// Multi-level subcommand groups (vibe file upload, vibe session list, etc.)
+const subcommandGroups = {
+  'file': ['upload', 'list', 'download', 'delete'],
+  'session': ['list', 'rename', 'info'],
+  'note': ['create', 'list'],
+};
+
+// Check for multi-level subcommands first
+let subcommandMode = null;  // e.g., { group: 'file', action: 'upload' }
+let subcommandArgs = [];    // remaining args after subcommand
+
+if (rawArgs.length >= 2 && subcommandGroups[rawArgs[0]]) {
+  const group = rawArgs[0];
+  const action = rawArgs[1];
+  if (subcommandGroups[group].includes(action)) {
+    subcommandMode = { group, action };
+    subcommandArgs = rawArgs.slice(2);
+  }
+}
+
+// Transform first arg if it's a simple subcommand (and not a multi-level one)
+const args = subcommandMode ? rawArgs : (
+  rawArgs.length > 0 && subcommands[rawArgs[0]]
+    ? [subcommands[rawArgs[0]], ...rawArgs.slice(1)]
+    : rawArgs
+);
 
 let initialPrompt = null;
 let resumeSessionId = null;
@@ -354,6 +376,56 @@ let listSessions = false;    // --list mode: list running sessions
 let remoteAttachMode = false;  // --remote with --bridge: pure remote control (no local Claude)
 let e2eEnabled = false;  // --e2e mode: enable end-to-end encryption
 let verboseMode = false;  // --verbose mode: show [vibe] debug messages
+
+// Subcommand mode options
+let subcommandOpts = {
+  folderId: null,    // -f, --folder
+  fileType: null,    // -t, --type (all, files, notes)
+  outputPath: null,  // -o, --output
+  fileName: null,    // -n, --name
+  content: null,     // -c, --content
+  force: false,      // --force
+  json: false,       // --json
+  running: false,    // --running
+  recent: false,     // --recent
+  targetPath: null,  // positional: file path or session ID
+  newName: null,     // positional: new name for rename
+};
+
+// Parse subcommand options if in subcommand mode
+if (subcommandMode) {
+  for (let i = 0; i < subcommandArgs.length; i++) {
+    const arg = subcommandArgs[i];
+    if (arg === '-f' || arg === '--folder') {
+      subcommandOpts.folderId = subcommandArgs[++i];
+    } else if (arg === '-t' || arg === '--type') {
+      subcommandOpts.fileType = subcommandArgs[++i];
+    } else if (arg === '-o' || arg === '--output') {
+      subcommandOpts.outputPath = subcommandArgs[++i];
+    } else if (arg === '-n' || arg === '--name') {
+      subcommandOpts.fileName = subcommandArgs[++i];
+    } else if (arg === '-c' || arg === '--content') {
+      subcommandOpts.content = subcommandArgs[++i];
+    } else if (arg === '--force') {
+      subcommandOpts.force = true;
+    } else if (arg === '--json') {
+      subcommandOpts.json = true;
+    } else if (arg === '--running') {
+      subcommandOpts.running = true;
+    } else if (arg === '--recent') {
+      subcommandOpts.recent = true;
+    } else if (arg === '--bridge' && subcommandArgs[i + 1]) {
+      bridgeUrl = subcommandArgs[++i];
+    } else if (!arg.startsWith('-')) {
+      // Positional arguments
+      if (!subcommandOpts.targetPath) {
+        subcommandOpts.targetPath = arg;
+      } else if (!subcommandOpts.newName) {
+        subcommandOpts.newName = arg;
+      }
+    }
+  }
+}
 
 for (let i = 0; i < args.length; i++) {
   if (args[i] === '--help' || args[i] === '-h') {
@@ -370,6 +442,27 @@ Commands:
   login            Sign in via minivibeapp.com (opens browser)
   logout           Sign out and remove stored auth
   help             Show this help message
+
+File Commands:
+  vibe file list [-f folder] [-t type] [--json]
+                   List files in folder (type: all, files, notes)
+  vibe file upload <path> [-f folder] [-n name]
+                   Upload file to cloud storage
+
+Session Commands:
+  vibe session list [--running] [--recent] [--json]
+                   List sessions (bridge + history)
+  vibe session rename <id> <name>
+                   Rename a session
+
+In-Session Commands (type during a session):
+  /name <name>     Rename current session
+  /upload <path>   Upload file to cloud
+  /download <id>   Download file by ID
+  /files           List uploaded files
+  /status          Show connection status
+  /info            Show session details
+  /help            Show available commands
 
 Options:
   --headless       Use device code flow for servers (no browser)
@@ -393,6 +486,9 @@ Examples:
   vibe login              Sign in (one-time setup)
   vibe                    Start session
   vibe "Fix the bug"      Start with prompt
+  vibe file list          List uploaded files
+  vibe file upload ./log.txt   Upload a file
+  vibe session list       List all sessions
   vibe --e2e              Enable encryption
   vibe --agent            Use local agent
 
@@ -583,6 +679,10 @@ const MAX_COMPLETED_TOOLS = 500;     // Limit Set size to prevent memory issues 
 let lastCapturedPrompt = null;       // Last permission prompt captured from CLI output
 const mobileMessageHashes = new Set();  // Track messages from mobile to avoid duplicate echo
 const MAX_MOBILE_MESSAGES = 100;     // Limit Set size
+
+// In-session slash command support
+let inputBuffer = '';  // Buffer for detecting slash commands
+const SLASH_COMMANDS = ['/name', '/upload', '/download', '/files', '/status', '/info', '/help'];
 
 // Colors for terminal output
 const colors = {
@@ -2161,6 +2261,369 @@ function startClaude() {
 }
 
 // ====================
+// In-Session Slash Commands
+// ====================
+
+function handleSlashCommand(input) {
+  const parts = input.trim().split(/\s+/);
+  const cmd = parts[0];
+  const args = parts.slice(1);
+
+  switch (cmd) {
+    case '/name':
+      slashCmdName(args.join(' '));
+      break;
+    case '/upload':
+      slashCmdUpload(args[0]);
+      break;
+    case '/download':
+      slashCmdDownload(args[0], args.slice(1));
+      break;
+    case '/files':
+      slashCmdFiles();
+      break;
+    case '/status':
+      slashCmdStatus();
+      break;
+    case '/info':
+      slashCmdInfo();
+      break;
+    case '/help':
+      slashCmdHelp();
+      break;
+    default:
+      console.log(`\n${colors.yellow}Unknown command: ${cmd}${colors.reset}`);
+      slashCmdHelp();
+  }
+}
+
+// /name <new-name> - Rename current session
+function slashCmdName(newName) {
+  if (!newName) {
+    console.log(`\n${colors.yellow}Usage: /name <new-name>${colors.reset}`);
+    return;
+  }
+
+  if (!bridgeSocket || bridgeSocket.readyState !== WebSocket.OPEN) {
+    console.log(`\n${colors.yellow}Not connected to bridge${colors.reset}`);
+    return;
+  }
+
+  console.log(`\n${colors.dim}Renaming session...${colors.reset}`);
+
+  bridgeSocket.send(JSON.stringify({
+    type: 'rename_session',
+    sessionId: sessionId,
+    name: newName
+  }));
+
+  // The response will come via the bridge message handler
+  // For now, optimistically update local state
+  sessionName = newName;
+  console.log(`${colors.green}Session renamed to "${newName}"${colors.reset}\n`);
+}
+
+// /upload <path> - Upload file to cloud
+async function slashCmdUpload(filePath) {
+  if (!filePath) {
+    console.log(`\n${colors.yellow}Usage: /upload <path>${colors.reset}`);
+    return;
+  }
+
+  // Resolve path relative to cwd
+  const fullPath = path.isAbsolute(filePath) ? filePath : path.join(process.cwd(), filePath);
+
+  if (!fs.existsSync(fullPath)) {
+    console.log(`\n${colors.red}File not found: ${filePath}${colors.reset}`);
+    return;
+  }
+
+  const stats = fs.statSync(fullPath);
+  if (stats.isDirectory()) {
+    console.log(`\n${colors.red}Cannot upload directories${colors.reset}`);
+    return;
+  }
+
+  const fileName = path.basename(fullPath);
+  const fileSize = stats.size;
+  const mimeType = getMimeType(fileName);
+
+  console.log(`\n${colors.dim}Uploading ${fileName} (${formatSize(fileSize)})...${colors.reset}`);
+
+  if (!bridgeSocket || bridgeSocket.readyState !== WebSocket.OPEN) {
+    console.log(`${colors.yellow}Not connected to bridge${colors.reset}`);
+    return;
+  }
+
+  // Request upload URL from bridge
+  const uploadPromise = new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => reject(new Error('Upload timeout')), 30000);
+
+    const handler = (data) => {
+      try {
+        const msg = JSON.parse(data.toString());
+        if (msg.type === 'upload_url') {
+          clearTimeout(timeout);
+          bridgeSocket.off('message', handler);
+          resolve(msg);
+        } else if (msg.type === 'error' && msg.context === 'upload') {
+          clearTimeout(timeout);
+          bridgeSocket.off('message', handler);
+          reject(new Error(msg.message || 'Upload failed'));
+        }
+      } catch (err) {
+        // Ignore parse errors
+      }
+    };
+
+    bridgeSocket.on('message', handler);
+
+    bridgeSocket.send(JSON.stringify({
+      type: 'get_upload_url',
+      name: fileName,
+      mimeType: mimeType,
+      size: fileSize
+    }));
+  });
+
+  try {
+    const { url: uploadUrl, fileId } = await uploadPromise;
+
+    // Upload to S3
+    const fileData = fs.readFileSync(fullPath);
+    const https = require('https');
+    const { URL } = require('url');
+    const parsedUrl = new URL(uploadUrl);
+
+    await new Promise((resolve, reject) => {
+      const req = https.request({
+        hostname: parsedUrl.hostname,
+        path: parsedUrl.pathname + parsedUrl.search,
+        method: 'PUT',
+        headers: {
+          'Content-Type': mimeType,
+          'Content-Length': fileSize
+        }
+      }, (res) => {
+        if (res.statusCode >= 200 && res.statusCode < 300) {
+          resolve();
+        } else {
+          reject(new Error(`Upload failed: HTTP ${res.statusCode}`));
+        }
+      });
+
+      req.on('error', reject);
+      req.write(fileData);
+      req.end();
+    });
+
+    // Confirm upload
+    bridgeSocket.send(JSON.stringify({
+      type: 'confirm_upload',
+      fileId: fileId
+    }));
+
+    console.log(`${colors.green}Uploaded ${fileName}${colors.reset}`);
+    console.log(`${colors.dim}File ID: ${fileId}${colors.reset}\n`);
+  } catch (err) {
+    console.log(`${colors.red}Upload failed: ${err.message}${colors.reset}\n`);
+  }
+}
+
+// /download <file-id> [-o path] - Download file
+async function slashCmdDownload(fileId, args) {
+  if (!fileId) {
+    console.log(`\n${colors.yellow}Usage: /download <file-id> [-o path]${colors.reset}`);
+    return;
+  }
+
+  let outputPath = null;
+  for (let i = 0; i < args.length; i++) {
+    if (args[i] === '-o' && args[i + 1]) {
+      outputPath = args[i + 1];
+      break;
+    }
+  }
+
+  if (!bridgeSocket || bridgeSocket.readyState !== WebSocket.OPEN) {
+    console.log(`\n${colors.yellow}Not connected to bridge${colors.reset}`);
+    return;
+  }
+
+  console.log(`\n${colors.dim}Downloading...${colors.reset}`);
+
+  // Request download URL from bridge
+  const downloadPromise = new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => reject(new Error('Download timeout')), 30000);
+
+    const handler = (data) => {
+      try {
+        const msg = JSON.parse(data.toString());
+        if (msg.type === 'download_url') {
+          clearTimeout(timeout);
+          bridgeSocket.off('message', handler);
+          resolve(msg);
+        } else if (msg.type === 'error' && msg.context === 'download') {
+          clearTimeout(timeout);
+          bridgeSocket.off('message', handler);
+          reject(new Error(msg.message || 'Download failed'));
+        }
+      } catch (err) {
+        // Ignore parse errors
+      }
+    };
+
+    bridgeSocket.on('message', handler);
+
+    bridgeSocket.send(JSON.stringify({
+      type: 'get_download_url',
+      fileId: fileId
+    }));
+  });
+
+  try {
+    const response = await downloadPromise;
+    const downloadUrl = response.url;
+    const fileName = response.name || `download_${fileId}`;
+
+    if (!downloadUrl) {
+      console.log(`${colors.red}No download URL received${colors.reset}\n`);
+      return;
+    }
+
+    // Download from URL
+    const https = require('https');
+    const { URL } = require('url');
+    const parsedUrl = new URL(downloadUrl);
+
+    const fileData = await new Promise((resolve, reject) => {
+      https.get({
+        hostname: parsedUrl.hostname,
+        path: parsedUrl.pathname + parsedUrl.search
+      }, (res) => {
+        if (res.statusCode >= 200 && res.statusCode < 300) {
+          const chunks = [];
+          res.on('data', chunk => chunks.push(chunk));
+          res.on('end', () => resolve(Buffer.concat(chunks)));
+        } else {
+          reject(new Error(`Download failed: HTTP ${res.statusCode}`));
+        }
+      }).on('error', reject);
+    });
+
+    // Write to file
+    const outPath = outputPath || path.join(process.cwd(), fileName);
+    fs.writeFileSync(outPath, fileData);
+
+    console.log(`${colors.green}Downloaded ${fileName}${colors.reset}`);
+    console.log(`${colors.dim}Saved to: ${outPath}${colors.reset}\n`);
+  } catch (err) {
+    console.log(`${colors.red}Download failed: ${err.message}${colors.reset}\n`);
+  }
+}
+
+// /files - List uploaded files
+async function slashCmdFiles() {
+  if (!bridgeSocket || bridgeSocket.readyState !== WebSocket.OPEN) {
+    console.log(`\n${colors.yellow}Not connected to bridge${colors.reset}`);
+    return;
+  }
+
+  console.log(`\n${colors.dim}Fetching files...${colors.reset}`);
+
+  const listPromise = new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => reject(new Error('Timeout')), 10000);
+
+    const handler = (data) => {
+      try {
+        const msg = JSON.parse(data.toString());
+        if (msg.type === 'folder_contents') {
+          clearTimeout(timeout);
+          bridgeSocket.off('message', handler);
+          resolve(msg.contents || msg.files || []);
+        } else if (msg.type === 'error') {
+          clearTimeout(timeout);
+          bridgeSocket.off('message', handler);
+          reject(new Error(msg.message || 'Failed to list files'));
+        }
+      } catch (err) {
+        // Ignore parse errors
+      }
+    };
+
+    bridgeSocket.on('message', handler);
+
+    bridgeSocket.send(JSON.stringify({
+      type: 'list_folder_contents'
+    }));
+  });
+
+  try {
+    const files = await listPromise;
+
+    if (files.length === 0) {
+      console.log(`${colors.dim}No files uploaded${colors.reset}\n`);
+      return;
+    }
+
+    console.log();
+    console.log(`${'ID'.padEnd(14)} ${'NAME'.padEnd(30)} ${'SIZE'.padEnd(10)} UPLOADED`);
+    console.log(`${'-'.repeat(14)} ${'-'.repeat(30)} ${'-'.repeat(10)} ${'-'.repeat(15)}`);
+
+    for (const file of files) {
+      const id = (file.id || '').slice(0, 12);
+      const name = (file.name || '').slice(0, 28);
+      const size = formatSize(file.size || 0);
+      const date = file.createdAt ? new Date(file.createdAt).toLocaleDateString() : '';
+      console.log(`${id.padEnd(14)} ${name.padEnd(30)} ${size.padEnd(10)} ${date}`);
+    }
+    console.log();
+  } catch (err) {
+    console.log(`${colors.red}Failed to list files: ${err.message}${colors.reset}\n`);
+  }
+}
+
+// /status - Show connection status
+function slashCmdStatus() {
+  console.log();
+  console.log(`${colors.cyan}${colors.bright}Session Status${colors.reset}`);
+  console.log();
+  const sessionDisplay = sessionId ? `${sessionId.slice(0, 8)}...` : colors.dim + '(no session)' + colors.reset;
+  console.log(`Session:  ${sessionDisplay}${sessionName ? ` (${sessionName})` : ''}`);
+  console.log(`Bridge:   ${bridgeSocket && bridgeSocket.readyState === WebSocket.OPEN ? colors.green + 'connected' + colors.reset : colors.yellow + 'disconnected' + colors.reset}`);
+  console.log(`E2E:      ${e2eEnabled ? colors.green + 'enabled' + colors.reset : colors.dim + 'disabled' + colors.reset}`);
+  console.log();
+}
+
+// /info - Show session details
+function slashCmdInfo() {
+  console.log();
+  console.log(`${colors.cyan}${colors.bright}Session Info${colors.reset}`);
+  console.log();
+  console.log(`Session ID: ${sessionId || colors.dim + '(no session)' + colors.reset}`);
+  console.log(`Name:       ${sessionName || colors.dim + '(unnamed)' + colors.reset}`);
+  console.log(`Path:       ${process.cwd()}`);
+  console.log(`Bridge:     ${bridgeUrl || DEFAULT_BRIDGE_URL}`);
+  console.log(`E2E:        ${e2eEnabled ? 'enabled' : 'disabled'}`);
+  console.log();
+}
+
+// /help - Show available slash commands
+function slashCmdHelp() {
+  console.log();
+  console.log(`${colors.cyan}${colors.bright}Available Commands${colors.reset}`);
+  console.log();
+  console.log(`  /name <name>         Rename this session`);
+  console.log(`  /upload <path>       Upload a file to cloud storage`);
+  console.log(`  /download <id>       Download a file by ID`);
+  console.log(`  /files               List uploaded files`);
+  console.log(`  /status              Show connection status`);
+  console.log(`  /info                Show session details`);
+  console.log(`  /help                Show this help`);
+  console.log();
+}
+
+// ====================
 // Terminal Input
 // ====================
 
@@ -2170,9 +2633,74 @@ function setupTerminalInput() {
   }
   process.stdin.resume();
   process.stdin.on('data', (data) => {
-    // Pass all input directly to Claude - no command interception
-    if (claudeProcess && isRunning && claudeProcess.stdin && claudeProcess.stdin.writable) {
-      claudeProcess.stdin.write(data);
+    if (!claudeProcess || !isRunning || !claudeProcess.stdin || !claudeProcess.stdin.writable) {
+      return;
+    }
+
+    const str = data.toString();
+
+    // Handle each character for slash command detection
+    for (let i = 0; i < str.length; i++) {
+      const char = str[i];
+      const code = str.charCodeAt(i);
+
+      // Enter key (CR or LF)
+      if (code === 13 || code === 10) {
+        const trimmed = inputBuffer.trim();
+
+        // Check if it's one of our slash commands
+        const matchedCmd = SLASH_COMMANDS.find(cmd =>
+          trimmed === cmd || trimmed.startsWith(cmd + ' ')
+        );
+
+        if (matchedCmd) {
+          // Clear Claude's input line (Ctrl+U) and move to new line
+          claudeProcess.stdin.write('\x15\n');
+
+          // Handle the slash command
+          handleSlashCommand(trimmed);
+
+          // Clear buffer
+          inputBuffer = '';
+        } else {
+          // Not our command - pass through to Claude and clear buffer
+          claudeProcess.stdin.write(char);
+          inputBuffer = '';
+        }
+      }
+      // Backspace (0x7f) or Delete (0x08)
+      else if (code === 127 || code === 8) {
+        // Remove last char from buffer
+        if (inputBuffer.length > 0) {
+          inputBuffer = inputBuffer.slice(0, -1);
+        }
+        // Pass through to Claude
+        claudeProcess.stdin.write(char);
+      }
+      // Ctrl+C (0x03) - clear buffer
+      else if (code === 3) {
+        inputBuffer = '';
+        claudeProcess.stdin.write(char);
+      }
+      // Ctrl+U (0x15) - clear line, clear buffer
+      else if (code === 21) {
+        inputBuffer = '';
+        claudeProcess.stdin.write(char);
+      }
+      // Escape character (0x1b) - start of escape sequence, clear buffer
+      else if (code === 27) {
+        inputBuffer = '';
+        claudeProcess.stdin.write(char);
+      }
+      // Regular printable character (space to tilde in ASCII)
+      else if (code >= 32 && code <= 126) {
+        inputBuffer += char;
+        claudeProcess.stdin.write(char);
+      }
+      // Other control characters - pass through but don't buffer
+      else {
+        claudeProcess.stdin.write(char);
+      }
     }
   });
 }
@@ -2725,9 +3253,409 @@ function listSessionsMode() {
   });
 }
 
+// ====================
+// Subcommand Modes
+// ====================
+
+// Helper: Create bridge connection for subcommand modes
+function createSubcommandBridgeConnection(onMessage) {
+  return new Promise((resolve, reject) => {
+    const WebSocket = require('ws');
+    const url = bridgeUrl || DEFAULT_BRIDGE_URL;
+    const socket = new WebSocket(url);
+
+    const timeout = setTimeout(() => {
+      socket.close();
+      reject(new Error('Connection timeout'));
+    }, 15000);
+
+    socket.on('open', () => {
+      // Authenticate
+      socket.send(JSON.stringify({ type: 'authenticate', token: authToken }));
+    });
+
+    socket.on('message', (data) => {
+      try {
+        const msg = JSON.parse(data.toString());
+        if (msg.type === 'authenticated') {
+          clearTimeout(timeout);
+          resolve({ socket, send: (m) => socket.send(JSON.stringify(m)) });
+        } else if (msg.type === 'auth_error') {
+          clearTimeout(timeout);
+          socket.close();
+          reject(new Error(msg.message || 'Authentication failed'));
+        } else {
+          onMessage(msg);
+        }
+      } catch (e) {}
+    });
+
+    socket.on('error', (err) => {
+      clearTimeout(timeout);
+      reject(err);
+    });
+
+    socket.on('close', () => {
+      clearTimeout(timeout);
+    });
+  });
+}
+
+// File List Mode
+async function fileListMode() {
+  if (!authToken) {
+    log('❌ Not authenticated. Run: vibe login', colors.red);
+    process.exit(1);
+  }
+
+  let gotResponse = false;
+
+  try {
+    const { socket, send } = await createSubcommandBridgeConnection((msg) => {
+      if (msg.type === 'folder_contents') {
+        gotResponse = true;
+
+        if (subcommandOpts.json) {
+          console.log(JSON.stringify({ folders: msg.folders, files: msg.files }, null, 2));
+        } else {
+          console.log('');
+          log('📁 Files', colors.bright + colors.cyan);
+          log('══════════════════════════════════════', colors.dim);
+
+          if (msg.folders && msg.folders.length > 0) {
+            for (const folder of msg.folders) {
+              log(`📁 ${folder.name}`, colors.yellow);
+              log(`   ID: ${folder.id}`, colors.dim);
+            }
+          }
+
+          if (msg.files && msg.files.length > 0) {
+            for (const file of msg.files) {
+              const icon = file.mimeType?.startsWith('image/') ? '🖼️' :
+                          file.mimeType?.startsWith('video/') ? '🎬' :
+                          file.mimeType?.startsWith('audio/') ? '🎵' :
+                          file.isNote ? '📝' : '📄';
+              const size = formatSize(file.size);
+              log(`${icon} ${file.name}  (${size})`, colors.green);
+              log(`   ID: ${file.id}`, colors.dim);
+            }
+          }
+
+          if ((!msg.folders || msg.folders.length === 0) && (!msg.files || msg.files.length === 0)) {
+            log('   No files found', colors.dim);
+          }
+
+          console.log('');
+        }
+
+        socket.close();
+        process.exit(0);
+      } else if (msg.type === 'error') {
+        gotResponse = true;
+        log(`❌ Error: ${msg.message}`, colors.red);
+        socket.close();
+        process.exit(1);
+      }
+    });
+
+    // Send list request
+    send({
+      type: 'list_folder_contents',
+      folderId: subcommandOpts.folderId || null,
+      filter: subcommandOpts.fileType || 'all'
+    });
+
+  } catch (err) {
+    log(`❌ ${err.message}`, colors.red);
+    process.exit(1);
+  }
+}
+
+// Format file size
+function formatSize(bytes) {
+  if (!bytes) return '0 B';
+  const units = ['B', 'KB', 'MB', 'GB'];
+  let i = 0;
+  while (bytes >= 1024 && i < units.length - 1) {
+    bytes /= 1024;
+    i++;
+  }
+  return `${bytes.toFixed(i > 0 ? 1 : 0)} ${units[i]}`;
+}
+
+// File Upload Mode
+async function fileUploadMode() {
+  if (!authToken) {
+    log('❌ Not authenticated. Run: vibe login', colors.red);
+    process.exit(1);
+  }
+
+  const filePath = subcommandOpts.targetPath;
+  if (!filePath) {
+    log('❌ No file path provided', colors.red);
+    log('   Usage: vibe file upload <path> [-f folder] [-n name]', colors.dim);
+    process.exit(1);
+  }
+
+  // Resolve and check file
+  const resolvedPath = path.resolve(filePath);
+  if (!fs.existsSync(resolvedPath)) {
+    log(`❌ File not found: ${resolvedPath}`, colors.red);
+    process.exit(1);
+  }
+
+  const stats = fs.statSync(resolvedPath);
+  if (stats.isDirectory()) {
+    log('❌ Cannot upload directory', colors.red);
+    process.exit(1);
+  }
+
+  const fileName = subcommandOpts.fileName || path.basename(resolvedPath);
+  const fileSize = stats.size;
+  const mimeType = getMimeType(fileName);
+
+  log(`📤 Uploading: ${fileName} (${formatSize(fileSize)})`, colors.cyan);
+
+  try {
+    const { socket, send } = await createSubcommandBridgeConnection((msg) => {
+      if (msg.type === 'upload_url') {
+        // Got presigned URL, now upload to S3
+        uploadToS3(msg.uploadUrl, resolvedPath, mimeType).then(() => {
+          // Confirm upload
+          send({
+            type: 'confirm_upload',
+            fileId: msg.fileId,
+            s3Key: msg.s3Key,
+            folderId: subcommandOpts.folderId || null,
+            name: fileName,
+            originalName: fileName,
+            mimeType: mimeType,
+            size: fileSize
+          });
+        }).catch((err) => {
+          log(`❌ Upload failed: ${err.message}`, colors.red);
+          socket.close();
+          process.exit(1);
+        });
+      } else if (msg.type === 'file_uploaded') {
+        if (subcommandOpts.json) {
+          console.log(JSON.stringify({ file: msg.file }, null, 2));
+        } else {
+          log(`✅ Uploaded: ${msg.file.name}`, colors.green);
+          log(`   ID: ${msg.file.id}`, colors.dim);
+        }
+        socket.close();
+        process.exit(0);
+      } else if (msg.type === 'error') {
+        log(`❌ Error: ${msg.message}`, colors.red);
+        socket.close();
+        process.exit(1);
+      }
+    });
+
+    // Request upload URL
+    send({
+      type: 'get_upload_url',
+      name: fileName,
+      mimeType: mimeType,
+      size: fileSize,
+      folderId: subcommandOpts.folderId || null
+    });
+
+  } catch (err) {
+    log(`❌ ${err.message}`, colors.red);
+    process.exit(1);
+  }
+}
+
+// Upload file to S3 using presigned URL
+async function uploadToS3(url, filePath, mimeType) {
+  const fileData = fs.readFileSync(filePath);
+  const https = require('https');
+  const http = require('http');
+
+  return new Promise((resolve, reject) => {
+    const parsedUrl = new URL(url);
+    const protocol = parsedUrl.protocol === 'https:' ? https : http;
+
+    const req = protocol.request(url, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': mimeType,
+        'Content-Length': fileData.length
+      }
+    }, (res) => {
+      if (res.statusCode >= 200 && res.statusCode < 300) {
+        resolve();
+      } else {
+        reject(new Error(`S3 upload failed: ${res.statusCode}`));
+      }
+    });
+
+    req.on('error', reject);
+    req.write(fileData);
+    req.end();
+  });
+}
+
+// Get MIME type from filename
+function getMimeType(filename) {
+  const ext = path.extname(filename).toLowerCase();
+  const mimeTypes = {
+    '.txt': 'text/plain',
+    '.html': 'text/html',
+    '.css': 'text/css',
+    '.js': 'application/javascript',
+    '.json': 'application/json',
+    '.xml': 'application/xml',
+    '.pdf': 'application/pdf',
+    '.zip': 'application/zip',
+    '.tar': 'application/x-tar',
+    '.gz': 'application/gzip',
+    '.png': 'image/png',
+    '.jpg': 'image/jpeg',
+    '.jpeg': 'image/jpeg',
+    '.gif': 'image/gif',
+    '.svg': 'image/svg+xml',
+    '.webp': 'image/webp',
+    '.mp3': 'audio/mpeg',
+    '.wav': 'audio/wav',
+    '.mp4': 'video/mp4',
+    '.webm': 'video/webm',
+    '.mov': 'video/quicktime',
+    '.md': 'text/markdown',
+    '.log': 'text/plain',
+  };
+  return mimeTypes[ext] || 'application/octet-stream';
+}
+
+// Session List Mode (via bridge, includes history)
+async function sessionListMode() {
+  if (!authToken) {
+    log('❌ Not authenticated. Run: vibe login', colors.red);
+    process.exit(1);
+  }
+
+  try {
+    const { socket, send } = await createSubcommandBridgeConnection((msg) => {
+      if (msg.type === 'sessions_list') {
+        let sessions = msg.sessions || [];
+
+        // Filter if requested
+        if (subcommandOpts.running) {
+          sessions = sessions.filter(s => s.status === 'active' || s.isLive);
+        } else if (subcommandOpts.recent) {
+          sessions = sessions.filter(s => s.status !== 'active' && !s.isLive);
+        }
+
+        if (subcommandOpts.json) {
+          console.log(JSON.stringify({ sessions }, null, 2));
+        } else {
+          console.log('');
+          log('📋 Sessions', colors.bright + colors.cyan);
+          log('══════════════════════════════════════', colors.dim);
+
+          if (sessions.length === 0) {
+            log('   No sessions found', colors.dim);
+          } else {
+            for (const session of sessions) {
+              const status = session.isLive || session.status === 'active' ? '🟢' : '⚪';
+              const name = session.name || 'Unnamed';
+              console.log('');
+              log(`${status} ${name}`, session.isLive ? colors.green : colors.dim);
+              log(`   ID:   ${session.sessionId || session.id}`, colors.dim);
+              if (session.path) log(`   Path: ${session.path}`, colors.dim);
+              if (session.messageCount) log(`   Msgs: ${session.messageCount}`, colors.dim);
+            }
+          }
+
+          console.log('');
+          log('══════════════════════════════════════', colors.dim);
+          console.log('');
+        }
+
+        socket.close();
+        process.exit(0);
+      } else if (msg.type === 'error') {
+        log(`❌ Error: ${msg.message}`, colors.red);
+        socket.close();
+        process.exit(1);
+      }
+    });
+
+    // Request sessions list
+    send({ type: 'list_sessions' });
+
+  } catch (err) {
+    log(`❌ ${err.message}`, colors.red);
+    process.exit(1);
+  }
+}
+
+// Session Rename Mode
+async function sessionRenameMode() {
+  if (!authToken) {
+    log('❌ Not authenticated. Run: vibe login', colors.red);
+    process.exit(1);
+  }
+
+  const targetSessionId = subcommandOpts.targetPath;
+  const newName = subcommandOpts.newName;
+
+  if (!targetSessionId || !newName) {
+    log('❌ Missing arguments', colors.red);
+    log('   Usage: vibe session rename <session-id> <new-name>', colors.dim);
+    process.exit(1);
+  }
+
+  try {
+    const { socket, send } = await createSubcommandBridgeConnection((msg) => {
+      if (msg.type === 'session_renamed') {
+        if (subcommandOpts.json) {
+          console.log(JSON.stringify({ sessionId: msg.sessionId, name: msg.name }, null, 2));
+        } else {
+          log(`✅ Session renamed to: ${msg.name}`, colors.green);
+        }
+        socket.close();
+        process.exit(0);
+      } else if (msg.type === 'error') {
+        log(`❌ Error: ${msg.message}`, colors.red);
+        socket.close();
+        process.exit(1);
+      }
+    });
+
+    // Send rename request
+    send({
+      type: 'rename_session',
+      sessionId: targetSessionId,
+      name: newName
+    });
+
+  } catch (err) {
+    log(`❌ ${err.message}`, colors.red);
+    process.exit(1);
+  }
+}
+
 // Only start Claude if not in login mode
 if (!loginMode) {
-  if (listSessions) {
+  // Handle subcommand modes first
+  if (subcommandMode) {
+    const { group, action } = subcommandMode;
+    if (group === 'file' && action === 'list') {
+      fileListMode();
+    } else if (group === 'file' && action === 'upload') {
+      fileUploadMode();
+    } else if (group === 'session' && action === 'list') {
+      sessionListMode();
+    } else if (group === 'session' && action === 'rename') {
+      sessionRenameMode();
+    } else {
+      log(`❌ Unknown command: ${group} ${action}`, colors.red);
+      process.exit(1);
+    }
+  } else if (listSessions) {
     listSessionsMode();
   } else if (remoteAttachMode) {
     remoteAttachMain();
