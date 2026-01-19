@@ -680,6 +680,12 @@ let lastCapturedPrompt = null;       // Last permission prompt captured from CLI
 const mobileMessageHashes = new Set();  // Track messages from mobile to avoid duplicate echo
 const MAX_MOBILE_MESSAGES = 100;     // Limit Set size
 
+// Buffer for encrypted messages received before key exchange completes
+// These will be processed after key exchange succeeds
+const e2ePendingMessages = [];
+const MAX_E2E_PENDING_MESSAGES = 10;
+const E2E_PENDING_TIMEOUT_MS = 30000;  // Discard buffered messages older than 30s
+
 // In-session slash command support
 let inputBuffer = '';  // Buffer for detecting slash commands
 const SLASH_COMMANDS = ['/name', '/upload', '/download', '/files', '/status', '/info', '/help'];
@@ -990,6 +996,41 @@ function handleBridgeMessage(msg) {
       }
       logStderr('[E2E] Encryption established!', colors.green);
       e2ePending = false;
+
+      // Process any buffered messages that were waiting for key exchange
+      if (e2ePendingMessages.length > 0) {
+        logStderr(`[E2E] Processing ${e2ePendingMessages.length} buffered message(s)...`, colors.cyan);
+        const now = Date.now();
+        let failedCount = 0;
+        while (e2ePendingMessages.length > 0) {
+          const pending = e2ePendingMessages.shift();
+          // Skip messages older than timeout
+          if (now - pending.timestamp > E2E_PENDING_TIMEOUT_MS) {
+            logStderr('[E2E] Discarding stale buffered message', colors.dim);
+            continue;
+          }
+          // Retry decryption with fresh keys
+          try {
+            const decrypted = e2e.decryptContent(pending.msg);
+            logStderr('[E2E] Successfully decrypted buffered message', colors.green);
+            handleBridgeMessage(decrypted);
+          } catch (err) {
+            // Decryption still failed - message was encrypted with old keys
+            failedCount++;
+            logStderr(`[E2E] Buffered message still encrypted with old keys`, colors.yellow);
+          }
+        }
+        // If any messages failed, request iOS to re-send
+        if (failedCount > 0) {
+          logStderr(`[E2E] ${failedCount} message(s) need re-send from iOS (encrypted with old keys)`, colors.yellow);
+          sendToBridge({
+            type: 'e2e_resend_request',
+            sessionId: effectiveSessionId,
+            reason: 'CLI keys regenerated - messages encrypted with old keys cannot be decrypted',
+            count: failedCount
+          });
+        }
+      }
     }
     return;
   }
@@ -1127,6 +1168,23 @@ function handleBridgeMessage(msg) {
       if (msg.content) {
         // Check if decryption failed (content is still an encrypted object)
         if (typeof msg.content === 'object' && msg.content.e2e) {
+          // If E2E is enabled but key exchange hasn't completed yet, buffer the message
+          if (e2eEnabled && !e2e.isReady()) {
+            if (e2ePendingMessages.length < MAX_E2E_PENDING_MESSAGES) {
+              logStderr('[E2E] Key exchange not complete - buffering encrypted message...', colors.cyan);
+              e2ePendingMessages.push({ msg: { ...msg }, timestamp: Date.now() });
+              // Notify iOS that message is pending
+              sendToBridge({
+                type: 'message_pending',
+                sessionId: effectiveSessionId,
+                reason: 'Waiting for E2E key exchange to complete'
+              });
+            } else {
+              logStderr('[E2E] Buffer full - discarding encrypted message', colors.yellow);
+            }
+            break;
+          }
+          // Key exchange completed but still can't decrypt - keys are out of sync
           logStderr('⚠️  Failed to decrypt message from mobile - E2E keys may be out of sync', colors.yellow);
           logStderr('   Try resetting E2E on both CLI (delete ~/.vibe/e2e-keys.json) and iOS', colors.dim);
           // Send error back to iOS so user knows message failed
