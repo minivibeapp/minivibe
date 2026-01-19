@@ -188,7 +188,7 @@ let agentId = null;
 let hostName = os.hostname();
 let reconnectTimer = null;
 let heartbeatTimer = null;
-let e2eEnabled = false;  // Enable E2E encryption for spawned sessions
+let e2eEnabled = true;  // E2E encryption enabled by default (use --no-e2e to disable)
 
 // Track running sessions: sessionId -> { process, path, name, localWs }
 const runningSessions = new Map();
@@ -1394,13 +1394,13 @@ ${colors.bold}Options:${colors.reset}
   --name <name>     Set host display name
   --bridge <url>    Override bridge URL (default: wss://ws.minivibeapp.com)
   --token <token>   Use specific Firebase token
-  --e2e             Enable E2E encryption for sessions (required if iOS has E2E enabled)
+  --no-e2e          Disable E2E encryption (enabled by default)
 
 ${colors.bold}Examples:${colors.reset}
   vibe-agent login          Sign in (one-time setup)
-  vibe-agent                Start agent
+  vibe-agent                Start agent (E2E enabled by default)
   vibe-agent --name "EC2"   Start with custom name
-  vibe-agent --e2e          Start with E2E encryption enabled
+  vibe-agent --no-e2e       Disable E2E for debugging
 `);
 }
 
@@ -1428,7 +1428,7 @@ function parseArgs() {
     name: null,
     status: false,
     help: false,
-    e2e: false
+    noE2e: false  // --no-e2e flag to disable E2E (E2E is ON by default)
   };
 
   for (let i = 0; i < args.length; i++) {
@@ -1456,8 +1456,8 @@ function parseArgs() {
       case '-h':
         options.help = true;
         break;
-      case '--e2e':
-        options.e2e = true;
+      case '--no-e2e':
+        options.noE2e = true;
         break;
     }
   }
@@ -1483,7 +1483,8 @@ async function main() {
   bridgeUrl = options.bridge || config.bridgeUrl || DEFAULT_BRIDGE_URL;
   hostName = options.name || config.hostName || os.hostname();
   agentId = config.agentId || null;  // Load persisted agentId
-  e2eEnabled = options.e2e || config.e2e || false;  // E2E encryption for sessions
+  // E2E is ON by default, disable with --no-e2e flag or config.noE2e
+  e2eEnabled = !(options.noE2e || config.noE2e);
 
   if (options.token) {
     authToken = options.token;
@@ -1500,8 +1501,8 @@ async function main() {
   if (options.name) {
     config.hostName = hostName;
   }
-  if (options.e2e) {
-    config.e2e = true;  // Persist E2E setting
+  if (options.noE2e) {
+    config.noE2e = true;  // Persist --no-e2e setting
   }
   saveConfig(config);
 
