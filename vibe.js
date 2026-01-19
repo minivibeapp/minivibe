@@ -1118,6 +1118,12 @@ function handleBridgeMessage(msg) {
     case 'send_message':
       // Mobile sent a message - forward to Claude
       // Track it so we don't echo it back (bridge already echoed to iOS)
+      {
+        const contentPreview = typeof msg.content === 'string'
+          ? msg.content.slice(0, 100)
+          : (msg.content ? JSON.stringify(msg.content).slice(0, 100) : '(empty)');
+        log(`📱 Received send_message from ${msg.source || 'unknown'}: "${contentPreview}..."`, colors.cyan);
+      }
       if (msg.content) {
         // Check if decryption failed (content is still an encrypted object)
         if (typeof msg.content === 'object' && msg.content.e2e) {
@@ -1141,7 +1147,18 @@ function handleBridgeMessage(msg) {
           mobileMessageHashes.delete(first);
         }
         mobileMessageHashes.add(hash);
-        sendToClaude(contentStr, msg.source || 'mobile');
+        log(`📤 Sending to Claude: "${contentStr.slice(0, 100)}..."`, colors.dim);
+        if (!sendToClaude(contentStr, msg.source || 'mobile')) {
+          log('⚠️  Failed to send message to Claude (not running?)', colors.yellow);
+          // Notify bridge of failure
+          sendToBridge({
+            type: 'error',
+            sessionId: effectiveSessionId,
+            message: 'Claude is not running - message not delivered'
+          });
+        }
+      } else {
+        log('⚠️  send_message received with no content', colors.yellow);
       }
       break;
 

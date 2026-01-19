@@ -808,6 +808,14 @@ function handleMessage(msg) {
       relayToLocalClient(msg);
       break;
 
+    case 'send_message':
+      // Mobile sent a message - relay to local vibe-cli
+      log(`📱 Relaying send_message to local client: "${(msg.content || '').toString().slice(0, 50)}..."`, colors.cyan);
+      if (!relayToLocalClient(msg)) {
+        log(`⚠️  Failed to relay send_message - no local client for session ${msg.sessionId?.slice(0, 8)}`, colors.yellow);
+      }
+      break;
+
     default:
       // Try to relay unknown messages to local client
       if (msg.sessionId) {
