@@ -78,6 +78,14 @@ Get token from MiniVibe iOS app: Settings > Copy Token for CLI.
 
 ## Usage Modes
 
+| Mode | Command | Description |
+|------|---------|-------------|
+| Direct | `vibe` | WebSocket to bridge server (default when authenticated) |
+| Direct | `vibe --bridge <url>` | WebSocket to custom relay server |
+| Agent | `vibe --agent` | Through local vibe-agent daemon |
+| Attach | `vibe --attach <id>` | Full terminal via local agent |
+| Remote | `vibe --remote <id>` | Chat-style control, no local Claude needed |
+
 ### Direct Mode (Default)
 
 Just run `vibe` after logging in:
@@ -108,6 +116,29 @@ vibe --agent --name "Backend Work"
 - Start/stop sessions remotely from iOS app
 - Sessions survive network hiccups
 - Cleaner process management
+
+### Attach Mode
+
+Attach to a running session managed by the local agent:
+
+```bash
+vibe --attach <session-id>
+```
+
+This provides full terminal passthrough to the session, useful for debugging or taking over a session started remotely.
+
+### Remote Mode
+
+Control a session running elsewhere without needing Claude installed locally:
+
+```bash
+vibe --remote <session-id>
+```
+
+This is useful for:
+- Monitoring sessions from a different machine
+- Sending messages to Claude from a lightweight client
+- Reviewing and approving permissions remotely
 
 ## Options
 
