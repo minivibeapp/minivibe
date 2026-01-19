@@ -188,6 +188,7 @@ let agentId = null;
 let hostName = os.hostname();
 let reconnectTimer = null;
 let heartbeatTimer = null;
+let e2eEnabled = false;  // Enable E2E encryption for spawned sessions
 
 // Track running sessions: sessionId -> { process, path, name, localWs }
 const runningSessions = new Map();
@@ -759,6 +760,7 @@ function handleMessage(msg) {
     case 'agent_registered':
       log(`Agent registered: ${msg.agentId}`, colors.green);
       log(`Host: ${hostName}`, colors.dim);
+      log(`E2E encryption: ${e2eEnabled ? 'enabled' : 'disabled'}`, colors.dim);
       log('Waiting for commands...', colors.cyan);
       break;
 
@@ -905,6 +907,11 @@ function handleStartSession(msg) {
 
   // Build args - use --agent to connect via local server
   const args = ['--agent', `ws://localhost:${LOCAL_SERVER_PORT}`];
+
+  // Pass E2E flag if enabled (needed to decrypt messages from iOS)
+  if (e2eEnabled) {
+    args.push('--e2e');
+  }
 
   if (name) {
     args.push('--name', name);
@@ -1076,6 +1083,11 @@ function handleResumeSession(msg) {
 
   // Build args with --resume - use --agent to connect via local server
   const args = ['--agent', `ws://localhost:${LOCAL_SERVER_PORT}`, '--resume', sessionId];
+
+  // Pass E2E flag if enabled (needed to decrypt messages from iOS)
+  if (e2eEnabled) {
+    args.push('--e2e');
+  }
 
   // Try to get session info from history if path not provided
   let effectivePath = projectPath;
@@ -1382,11 +1394,13 @@ ${colors.bold}Options:${colors.reset}
   --name <name>     Set host display name
   --bridge <url>    Override bridge URL (default: wss://ws.minivibeapp.com)
   --token <token>   Use specific Firebase token
+  --e2e             Enable E2E encryption for sessions (required if iOS has E2E enabled)
 
 ${colors.bold}Examples:${colors.reset}
   vibe-agent login          Sign in (one-time setup)
   vibe-agent                Start agent
   vibe-agent --name "EC2"   Start with custom name
+  vibe-agent --e2e          Start with E2E encryption enabled
 `);
 }
 
@@ -1413,7 +1427,8 @@ function parseArgs() {
     logout: false,
     name: null,
     status: false,
-    help: false
+    help: false,
+    e2e: false
   };
 
   for (let i = 0; i < args.length; i++) {
@@ -1441,6 +1456,9 @@ function parseArgs() {
       case '-h':
         options.help = true;
         break;
+      case '--e2e':
+        options.e2e = true;
+        break;
     }
   }
 
@@ -1465,6 +1483,7 @@ async function main() {
   bridgeUrl = options.bridge || config.bridgeUrl || DEFAULT_BRIDGE_URL;
   hostName = options.name || config.hostName || os.hostname();
   agentId = config.agentId || null;  // Load persisted agentId
+  e2eEnabled = options.e2e || config.e2e || false;  // E2E encryption for sessions
 
   if (options.token) {
     authToken = options.token;
@@ -1480,6 +1499,9 @@ async function main() {
   }
   if (options.name) {
     config.hostName = hostName;
+  }
+  if (options.e2e) {
+    config.e2e = true;  // Persist E2E setting
   }
   saveConfig(config);
 

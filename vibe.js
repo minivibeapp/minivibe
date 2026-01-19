@@ -1129,6 +1129,12 @@ function handleBridgeMessage(msg) {
         if (typeof msg.content === 'object' && msg.content.e2e) {
           logStderr('⚠️  Failed to decrypt message from mobile - E2E keys may be out of sync', colors.yellow);
           logStderr('   Try resetting E2E on both CLI (delete ~/.vibe/e2e-keys.json) and iOS', colors.dim);
+          // Send error back to iOS so user knows message failed
+          sendToBridge({
+            type: 'error',
+            sessionId: effectiveSessionId,
+            message: 'E2E encryption mismatch - CLI cannot decrypt message. Disable E2E on iOS or restart CLI with --e2e flag.'
+          });
           break;
         }
 
