@@ -77,18 +77,37 @@ function log(msg, color = colors.reset) {
 }
 
 /**
- * Clean CLI output for logging - removes ANSI codes and collapses whitespace
+ * Clean CLI output for logging - removes ANSI codes, TUI elements, and collapses whitespace
  */
 function cleanCliOutput(data) {
   let output = data.toString();
-  // Strip ANSI escape codes (colors, cursor movement, screen clearing)
-  output = output.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '');
-  // Strip other control characters except newline
-  output = output.replace(/[\x00-\x09\x0b-\x1f]/g, '');
-  // Collapse multiple newlines into single newline
-  output = output.replace(/\n{3,}/g, '\n\n');
-  // Trim and return
-  return output.trim();
+
+  // Strip all ANSI escape sequences (comprehensive pattern)
+  // Includes: CSI sequences, OSC sequences, DCS sequences, and simple escapes
+  output = output.replace(/\x1b\[[?]?[0-9;]*[a-zA-Z]/g, '');  // CSI with optional ?
+  output = output.replace(/\x1b\][^\x07]*\x07/g, '');          // OSC sequences
+  output = output.replace(/\x1b[PX^_].*?\x1b\\/g, '');         // DCS/PM/APC sequences
+  output = output.replace(/\x1b[()][AB012]/g, '');             // Character set selection
+  output = output.replace(/\x1b[78DEHM]/g, '');                // Other simple escapes
+
+  // Strip other control characters except newline and tab
+  output = output.replace(/[\x00-\x08\x0b-\x1f\x7f]/g, '');
+
+  // Filter out TUI status bar elements (Claude's UI)
+  output = output.replace(/[─│┌┐└┘├┤┬┴┼]+/g, '');             // Box drawing chars
+  output = output.replace(/[✻◐◑◒◓⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏]/g, '');        // Spinner chars
+  output = output.replace(/\?\s*for shortcuts.*toggle\)/gi, ''); // Status bar text
+  output = output.replace(/Thinking\s+(on|off)\s*\(tab to toggle\)/gi, '');
+  output = output.replace(/\(esc to interrupt\)/gi, '');
+  output = output.replace(/Envisioning…/g, '');
+
+  // Collapse multiple spaces/newlines
+  output = output.replace(/[ \t]+/g, ' ');
+  output = output.replace(/\n{2,}/g, '\n');
+
+  // Trim and return (return empty string if only whitespace remains)
+  output = output.trim();
+  return output.length > 0 ? output : '';
 }
 
 // ====================
