@@ -883,8 +883,10 @@ function handleMessage(msg) {
 
 function findVibeCli() {
   // Look for vibe.js in common locations
+  // Priority: git checkout (same repo) > user home > system installed
   const locations = [
-    path.join(__dirname, '..', 'vibe-cli', 'vibe.js'),
+    path.join(__dirname, '..', 'vibe.js'),           // Same repo as agent (git checkout)
+    path.join(__dirname, '..', 'vibe-cli', 'vibe.js'), // Legacy path
     path.join(os.homedir(), 'vibe-cli', 'vibe.js'),
   ];
 
