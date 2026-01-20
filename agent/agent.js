@@ -679,12 +679,15 @@ function handleLocalMessage(clientWs, msg) {
       }
 
       // Log important message types from CLI
+      const sessionPrefix = msg.sessionId ? `[${msg.sessionId.slice(0, 8)}]` : '';
       if (msg.type === 'claude_message') {
-        const sessionPrefix = msg.sessionId ? `[${msg.sessionId.slice(0, 8)}]` : '';
-        const contentPreview = msg.content ? msg.content.toString().slice(0, 200) : '(no content)';
-        log(`${sessionPrefix} 🤖 Claude: ${contentPreview}${msg.content?.length > 200 ? '...' : ''}`, colors.cyan);
+        // Handle both string and object content (e.g., encrypted)
+        const contentStr = typeof msg.content === 'string' ? msg.content :
+                          (msg.content?.ciphertext ? '[encrypted]' : JSON.stringify(msg.content || ''));
+        const preview = contentStr.slice(0, 150);
+        const truncated = contentStr.length > 150 ? '...' : '';
+        log(`${sessionPrefix} 🤖 Claude: ${preview}${truncated}`, colors.cyan);
       } else if (msg.type === 'permission_request') {
-        const sessionPrefix = msg.sessionId ? `[${msg.sessionId.slice(0, 8)}]` : '';
         log(`${sessionPrefix} 🔔 Permission request: ${msg.toolName || msg.question || 'unknown'}`, colors.yellow);
       }
 
@@ -872,9 +875,15 @@ function handleMessage(msg) {
 
     case 'send_message':
       // Mobile sent a message - relay to local vibe-cli
-      log(`📱 Relaying send_message to local client: "${(msg.content || '').toString().slice(0, 50)}..."`, colors.cyan);
+      const sendSessionPrefix = msg.sessionId ? `[${msg.sessionId.slice(0, 8)}]` : '';
+      // Handle both string and object content (e.g., encrypted)
+      const sendContentStr = typeof msg.content === 'string' ? msg.content :
+                            (msg.content?.ciphertext ? '[encrypted]' : JSON.stringify(msg.content || ''));
+      const sendPreview = sendContentStr.slice(0, 150);
+      const sendTruncated = sendContentStr.length > 150 ? '...' : '';
+      log(`${sendSessionPrefix} 📱 User: ${sendPreview}${sendTruncated}`, colors.green);
       if (!relayToLocalClient(msg)) {
-        log(`⚠️  Failed to relay send_message - no local client for session ${msg.sessionId?.slice(0, 8)}`, colors.yellow);
+        log(`${sendSessionPrefix} ⚠️  Failed to relay - no local client`, colors.yellow);
       }
       break;
 
