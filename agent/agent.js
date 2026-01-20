@@ -678,6 +678,16 @@ function handleLocalMessage(clientWs, msg) {
         msg.sessionId = clientInfo.sessionId;
       }
 
+      // Log important message types from CLI
+      if (msg.type === 'claude_message') {
+        const sessionPrefix = msg.sessionId ? `[${msg.sessionId.slice(0, 8)}]` : '';
+        const contentPreview = msg.content ? msg.content.toString().slice(0, 200) : '(no content)';
+        log(`${sessionPrefix} 🤖 Claude: ${contentPreview}${msg.content?.length > 200 ? '...' : ''}`, colors.cyan);
+      } else if (msg.type === 'permission_request') {
+        const sessionPrefix = msg.sessionId ? `[${msg.sessionId.slice(0, 8)}]` : '';
+        log(`${sessionPrefix} 🔔 Permission request: ${msg.toolName || msg.question || 'unknown'}`, colors.yellow);
+      }
+
       // Relay certain message types to attached clients for terminal mirroring
       if (['claude_message', 'permission_request', 'session_status'].includes(msg.type)) {
         const msgSession = runningSessions.get(clientInfo.sessionId);
