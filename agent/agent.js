@@ -792,6 +792,22 @@ function handleMessage(msg) {
       log(`Bridge error: ${msg.message}`, colors.red);
       // Relay errors to local client if applicable
       relayToLocalClient(msg);
+
+      // Check for auth-related errors and try to refresh token
+      const errorLower = (msg.message || '').toLowerCase();
+      if (errorLower.includes('token') || errorLower.includes('auth') || errorLower.includes('unauthorized')) {
+        log('Attempting token refresh...', colors.yellow);
+        (async () => {
+          const newToken = await refreshIdToken();
+          if (newToken) {
+            authToken = newToken;
+            log('Token refreshed, re-authenticating...', colors.green);
+            send({ type: 'authenticate', token: newToken });
+          } else {
+            log('Token refresh failed. Please re-login: vibe-agent login', colors.red);
+          }
+        })();
+      }
       break;
 
     // Messages to relay to local vibe-cli clients
