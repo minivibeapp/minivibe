@@ -681,12 +681,17 @@ function handleLocalMessage(clientWs, msg) {
       // Log important message types from CLI
       const sessionPrefix = msg.sessionId ? `[${msg.sessionId.slice(0, 8)}]` : '';
       if (msg.type === 'claude_message') {
+        // Content is nested in msg.message.content (not msg.content)
+        const rawContent = msg.message?.content || msg.content;
+        const sender = msg.message?.sender || 'claude';
         // Handle both string and object content (e.g., encrypted)
-        const contentStr = typeof msg.content === 'string' ? msg.content :
-                          (msg.content?.ciphertext ? '[encrypted]' : JSON.stringify(msg.content || ''));
+        const contentStr = typeof rawContent === 'string' ? rawContent :
+                          (rawContent?.ciphertext ? '[encrypted]' : JSON.stringify(rawContent || ''));
         const preview = contentStr.slice(0, 150);
         const truncated = contentStr.length > 150 ? '...' : '';
-        log(`${sessionPrefix} 🤖 Claude: ${preview}${truncated}`, colors.cyan);
+        const emoji = sender === 'user' ? '📱' : '🤖';
+        const label = sender === 'user' ? 'User' : 'Claude';
+        log(`${sessionPrefix} ${emoji} ${label}: ${preview}${truncated}`, sender === 'user' ? colors.green : colors.cyan);
       } else if (msg.type === 'permission_request') {
         log(`${sessionPrefix} 🔔 Permission request: ${msg.toolName || msg.question || 'unknown'}`, colors.yellow);
       }
