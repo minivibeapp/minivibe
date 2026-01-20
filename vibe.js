@@ -1017,18 +1017,16 @@ function handleBridgeMessage(msg) {
           } catch (err) {
             // Decryption still failed - message was encrypted with old keys
             failedCount++;
-            logStderr(`[E2E] Buffered message still encrypted with old keys`, colors.yellow);
+            logStderr(`[E2E] Buffered message encrypted with old keys - cannot decrypt`, colors.yellow);
           }
         }
-        // If any messages failed, request iOS to re-send
+        // Warn user about failed messages - they need to re-send from iOS
         if (failedCount > 0) {
-          logStderr(`[E2E] ${failedCount} message(s) need re-send from iOS (encrypted with old keys)`, colors.yellow);
-          sendToBridge({
-            type: 'e2e_resend_request',
-            sessionId: effectiveSessionId,
-            reason: 'CLI keys regenerated - messages encrypted with old keys cannot be decrypted',
-            count: failedCount
-          });
+          logStderr(``, colors.yellow);
+          logStderr(`⚠️  ${failedCount} message(s) could not be decrypted`, colors.yellow);
+          logStderr(`   These were encrypted before CLI received your new keys.`, colors.dim);
+          logStderr(`   Please re-send from iOS.`, colors.dim);
+          logStderr(``, colors.yellow);
         }
       }
     }
