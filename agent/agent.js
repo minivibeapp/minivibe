@@ -188,7 +188,7 @@ let agentId = null;
 let hostName = os.hostname();
 let reconnectTimer = null;
 let heartbeatTimer = null;
-let e2eEnabled = true;  // E2E encryption enabled by default (use --no-e2e to disable)
+let e2eEnabled = false;  // E2E DISABLED - WSS provides transport encryption (use --e2e to enable)
 
 // Track running sessions: sessionId -> { process, path, name, localWs }
 const runningSessions = new Map();
@@ -1410,13 +1410,13 @@ ${colors.bold}Options:${colors.reset}
   --name <name>     Set host display name
   --bridge <url>    Override bridge URL (default: wss://ws.minivibeapp.com)
   --token <token>   Use specific Firebase token
-  --no-e2e          Disable E2E encryption (enabled by default)
+  --e2e             Enable E2E encryption (disabled by default, WSS provides transport encryption)
 
 ${colors.bold}Examples:${colors.reset}
   vibe-agent login          Sign in (one-time setup)
-  vibe-agent                Start agent (E2E enabled by default)
+  vibe-agent                Start agent (E2E disabled, uses WSS transport encryption)
   vibe-agent --name "EC2"   Start with custom name
-  vibe-agent --no-e2e       Disable E2E for debugging
+  vibe-agent --e2e          Enable E2E encryption
 `);
 }
 
@@ -1444,7 +1444,7 @@ function parseArgs() {
     name: null,
     status: false,
     help: false,
-    noE2e: false  // --no-e2e flag to disable E2E (E2E is ON by default)
+    e2e: false  // --e2e flag to enable E2E (E2E is OFF by default)
   };
 
   for (let i = 0; i < args.length; i++) {
@@ -1472,8 +1472,8 @@ function parseArgs() {
       case '-h':
         options.help = true;
         break;
-      case '--no-e2e':
-        options.noE2e = true;
+      case '--e2e':
+        options.e2e = true;
         break;
     }
   }
@@ -1499,8 +1499,8 @@ async function main() {
   bridgeUrl = options.bridge || config.bridgeUrl || DEFAULT_BRIDGE_URL;
   hostName = options.name || config.hostName || os.hostname();
   agentId = config.agentId || null;  // Load persisted agentId
-  // E2E is ON by default, disable with --no-e2e flag or config.noE2e
-  e2eEnabled = !(options.noE2e || config.noE2e);
+  // E2E is OFF by default (WSS provides transport encryption), enable with --e2e flag or config.e2e
+  e2eEnabled = options.e2e || config.e2e || false;
 
   if (options.token) {
     authToken = options.token;
@@ -1517,8 +1517,8 @@ async function main() {
   if (options.name) {
     config.hostName = hostName;
   }
-  if (options.noE2e) {
-    config.noE2e = true;  // Persist --no-e2e setting
+  if (options.e2e) {
+    config.e2e = true;  // Persist --e2e setting
   }
   saveConfig(config);
 
