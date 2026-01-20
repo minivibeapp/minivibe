@@ -681,6 +681,11 @@ function handleLocalMessage(clientWs, msg) {
       // Log important message types from CLI
       const sessionPrefix = msg.sessionId ? `[${msg.sessionId.slice(0, 8)}]` : '';
       if (msg.type === 'claude_message') {
+        // DEBUG: Log raw message structure to find content location
+        log(`${sessionPrefix} 🔍 DEBUG claude_message keys: ${Object.keys(msg).join(', ')}`, colors.dim);
+        if (msg.message) {
+          log(`${sessionPrefix} 🔍 DEBUG msg.message keys: ${Object.keys(msg.message).join(', ')}`, colors.dim);
+        }
         // Content is nested in msg.message.content (not msg.content)
         const rawContent = msg.message?.content || msg.content;
         const sender = msg.message?.sender || 'claude';
