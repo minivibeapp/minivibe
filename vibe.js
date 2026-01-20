@@ -2221,8 +2221,12 @@ function startClaude() {
       process.exit(1);
     }
 
-    // Always use FD 4 for terminal output mirroring (needed for proper PTY handling)
-    const stdioConfig = ['pipe', 'inherit', 'inherit', 'pipe', 'pipe'];
+    // FD 4 is for terminal output mirroring (needed for proper PTY handling)
+    // In agent mode, don't inherit stdout/stderr - Claude's TUI would flood agent console
+    // Terminal output is forwarded via FD 4 anyway
+    const stdioConfig = agentUrl
+      ? ['pipe', 'ignore', 'ignore', 'pipe', 'pipe']
+      : ['pipe', 'inherit', 'inherit', 'pipe', 'pipe'];
 
     claudeProcess = spawn('node', [nodeWrapperPath, claudePath, ...claudeArgs], {
       cwd: process.cwd(),
@@ -2246,8 +2250,11 @@ function startClaude() {
       process.exit(1);
     }
 
-    // Always use FD 4 for terminal output mirroring (needed for proper PTY handling)
-    const stdioConfig = ['pipe', 'inherit', 'inherit', 'pipe', 'pipe'];
+    // FD 4 is for terminal output mirroring (needed for proper PTY handling)
+    // In agent mode, don't inherit stdout/stderr - Claude's TUI would flood agent console
+    const stdioConfig = agentUrl
+      ? ['pipe', 'ignore', 'ignore', 'pipe', 'pipe']
+      : ['pipe', 'inherit', 'inherit', 'pipe', 'pipe'];
 
     claudeProcess = spawn('python3', ['-u', pythonWrapperPath, claudePath, ...claudeArgs], {
       cwd: process.cwd(),
