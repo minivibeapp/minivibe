@@ -76,6 +76,21 @@ function log(msg, color = colors.reset) {
   console.log(`${colors.dim}[${timestamp}]${colors.reset} ${color}${msg}${colors.reset}`);
 }
 
+/**
+ * Clean CLI output for logging - removes ANSI codes and collapses whitespace
+ */
+function cleanCliOutput(data) {
+  let output = data.toString();
+  // Strip ANSI escape codes (colors, cursor movement, screen clearing)
+  output = output.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '');
+  // Strip other control characters except newline
+  output = output.replace(/[\x00-\x09\x0b-\x1f]/g, '');
+  // Collapse multiple newlines into single newline
+  output = output.replace(/\n{3,}/g, '\n\n');
+  // Trim and return
+  return output.trim();
+}
+
 // ====================
 // Configuration Management
 // ====================
@@ -976,15 +991,15 @@ function handleStartSession(msg) {
     });
 
     proc.stdout.on('data', (data) => {
-      // Log output for debugging
-      const output = data.toString().trim();
+      // Log output for debugging (cleaned to remove ANSI codes and excess newlines)
+      const output = cleanCliOutput(data);
       if (output) {
         log(`[${newSessionId.slice(0, 8)}] ${output}`, colors.dim);
       }
     });
 
     proc.stderr.on('data', (data) => {
-      const output = data.toString().trim();
+      const output = cleanCliOutput(data);
       if (output) {
         log(`[${newSessionId.slice(0, 8)}] ${output}`, colors.yellow);
       }
@@ -1170,14 +1185,14 @@ function handleResumeSession(msg) {
     });
 
     proc.stdout.on('data', (data) => {
-      const output = data.toString().trim();
+      const output = cleanCliOutput(data);
       if (output) {
         log(`[${sessionId.slice(0, 8)}] ${output}`, colors.dim);
       }
     });
 
     proc.stderr.on('data', (data) => {
-      const output = data.toString().trim();
+      const output = cleanCliOutput(data);
       if (output) {
         log(`[${sessionId.slice(0, 8)}] ${output}`, colors.yellow);
       }
