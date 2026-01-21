@@ -120,6 +120,7 @@ function handleBridgeMessage(ctx: AppContext, msg: Record<string, unknown>): voi
     case 'authenticated':
       ctx.isAuthenticated = true;
       log('Authenticated with bridge', colors.green);
+      // Register session first - E2E key exchange happens after session_registered
       ctx.bridgeSocket?.send(JSON.stringify({
         type: 'register_session',
         sessionId: ctx.effectiveSessionId,
@@ -127,10 +128,18 @@ function handleBridgeMessage(ctx: AppContext, msg: Record<string, unknown>): voi
         name: ctx.options.sessionName || path.basename(process.cwd()),
         e2e: ctx.options.e2eEnabled,
       }));
+      break;
+
+    case 'session_registered':
+      logStatus(`Session registered: ${(msg.sessionId as string)?.slice(0, 8)}...`);
+      // Now send E2E key exchange (must be AFTER register_session)
       if (ctx.options.e2eEnabled && ctx.e2e) {
         ctx.e2e.init();
         if (!ctx.e2e.isReady()) {
-          ctx.bridgeSocket?.send(JSON.stringify(ctx.e2e.createKeyExchangeMessage(true)));
+          const keyMsg = ctx.e2e.createKeyExchangeMessage(true);
+          keyMsg.sessionId = ctx.effectiveSessionId;
+          ctx.bridgeSocket?.send(JSON.stringify(keyMsg));
+          log('[E2E] Sent public key to bridge', colors.cyan);
         }
       }
       break;
@@ -197,6 +206,17 @@ function handleBridgeMessage(ctx: AppContext, msg: Record<string, unknown>): voi
       if (ctx.claudeProcess && !ctx.claudeProcess.killed) {
         ctx.claudeProcess.kill('SIGTERM');
       }
+      break;
+
+    case 'session_renamed':
+      if (msg.name) {
+        ctx.options.sessionName = msg.name as string;
+        logStatus(`Session renamed: ${msg.name}`);
+      }
+      break;
+
+    case 'error':
+      log(`Bridge error: ${msg.message}`, colors.red);
       break;
   }
 }
