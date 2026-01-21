@@ -10,6 +10,18 @@ interface JWTPayload {
   iat: number;
   sub: string;
   email?: string;
+  name?: string;
+  picture?: string;
+}
+
+/**
+ * User info extracted from token
+ */
+export interface UserInfo {
+  email: string | null;
+  name: string | null;
+  picture: string | null;
+  userId: string | null;
 }
 
 /**
@@ -65,6 +77,24 @@ export function decodeToken(token: string): JWTPayload | null {
   } catch {
     return null;
   }
+}
+
+/**
+ * Get current user info from stored token
+ */
+export function getUserInfo(): UserInfo | null {
+  const auth = getStoredAuth();
+  if (!auth?.idToken) return null;
+
+  const payload = decodeToken(auth.idToken);
+  if (!payload) return null;
+
+  return {
+    email: payload.email || null,
+    name: payload.name || null,
+    picture: payload.picture || null,
+    userId: payload.sub || null,
+  };
 }
 
 /**

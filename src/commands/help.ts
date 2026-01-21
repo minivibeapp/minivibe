@@ -51,6 +51,8 @@ Usage:
 Authentication:
   vibe login                   Login with your MiniVibe account
   vibe login --headless        Login without opening browser
+  vibe whoami                  Show logged-in user info
+  vibe logout                  Log out and clear credentials
 
 Options:
   --resume, -r <id>           Resume a session by ID

@@ -39,6 +39,7 @@ export interface CliOptions {
   logoutMode: boolean;
   statusMode: boolean;
   helpMode: boolean;
+  whoamiMode: boolean;
 }
 
 /**
@@ -159,6 +160,7 @@ export function createDefaultOptions(): CliOptions {
     loginMode: false,
     logoutMode: false,
     statusMode: false,
+    whoamiMode: false,
     helpMode: false,
   };
 }

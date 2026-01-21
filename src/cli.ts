@@ -10,7 +10,7 @@ import { v4 as uuidv4 } from 'uuid';
 
 import { DEFAULT_BRIDGE_URL, DEFAULT_AGENT_URL, AGENT_PORT_FILE } from './utils/config';
 import { colors } from './utils/colors';
-import { clearAuth, ensureValidToken, startLoginFlow, startHeadlessLogin } from './auth';
+import { clearAuth, ensureValidToken, startLoginFlow, startHeadlessLogin, getUserInfo } from './auth';
 import { showWelcomeMessage, showClaudeNotFoundMessage, showHelp } from './commands/help';
 import { checkClaudeInstalled } from './claude/process';
 import { createAppContext, createDefaultOptions, type CliOptions, type SubcommandMode } from './context';
@@ -40,7 +40,7 @@ function parseArgs(argv: string[]): { options: CliOptions; subcommand: Subcomman
   let subcommand: SubcommandMode | null = null;
 
   // Subcommand shortcuts
-  const shortcuts: Record<string, string> = { login: '--login', logout: '--logout', status: '--status', help: '--help' };
+  const shortcuts: Record<string, string> = { login: '--login', logout: '--logout', status: '--status', help: '--help', whoami: '--whoami' };
   const groups: Record<string, string[]> = {
     file: ['upload', 'list', 'download', 'delete'],
     session: ['list', 'rename', 'info'],
@@ -60,6 +60,7 @@ function parseArgs(argv: string[]): { options: CliOptions; subcommand: Subcomman
     if (a === '--login') options.loginMode = true;
     else if (a === '--logout') options.logoutMode = true;
     else if (a === '--status') options.statusMode = true;
+    else if (a === '--whoami') options.whoamiMode = true;
     else if (a === '--help' || a === '-h') options.helpMode = true;
     else if (a === '--headless') options.headlessMode = true;
     else if (a === '--verbose' || a === '-v') options.verboseMode = true;
@@ -107,6 +108,17 @@ async function main(): Promise<void> {
   if (options.helpMode) { showHelp(); process.exit(0); }
   if (options.loginMode) { await (options.headlessMode ? startHeadlessLogin() : startLoginFlow()); return; }
   if (options.logoutMode) { clearAuth(); console.log('Logged out'); process.exit(0); }
+  if (options.whoamiMode) {
+    const user = getUserInfo();
+    if (!user) {
+      console.log('Not logged in. Run: vibe login');
+      process.exit(1);
+    }
+    console.log(`${colors.green}Logged in as:${colors.reset}`);
+    if (user.name) console.log(`  Name:  ${user.name}`);
+    if (user.email) console.log(`  Email: ${user.email}`);
+    process.exit(0);
+  }
 
   // TODO: Handle subcommands (file upload, session list, etc.)
   if (subcommand) {
