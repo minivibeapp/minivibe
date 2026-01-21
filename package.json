@@ -15,14 +15,13 @@
   "types": "dist/index.d.ts",
   "bin": {
     "vibe": "./dist/cli.js",
-    "vibe-agent": "./agent/agent.js"
+    "vibe-agent": "./dist/agent/cli.js"
   },
   "files": [
     "dist/",
     "e2e.js",
     "pty-wrapper.py",
     "pty-wrapper-node.js",
-    "agent/",
     "README.md",
     "LICENSE"
   ],

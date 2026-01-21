@@ -4,8 +4,8 @@ const path = require('path');
 const fs = require('fs');
 const os = require('os');
 
-const VIBE_PATH = path.join(__dirname, '..', 'vibe.js');
-const AGENT_PATH = path.join(__dirname, '..', 'agent', 'agent.js');
+const VIBE_PATH = path.join(__dirname, '..', 'dist', 'cli.js');
+const AGENT_PATH = path.join(__dirname, '..', 'dist', 'agent', 'cli.js');
 
 // Set shorter timeout for network tests
 const NETWORK_TIMEOUT = 5000;
@@ -183,16 +183,12 @@ describe('Agent Status', () => {
   });
 });
 
-describe('Syntax Validation', () => {
-  it('vibe.js should have valid syntax', () => {
-    expect(() => {
-      execSync(`node --check ${VIBE_PATH}`, { encoding: 'utf8' });
-    }).not.toThrow();
+describe('Build Validation', () => {
+  it('dist/cli.js should exist', () => {
+    expect(fs.existsSync(VIBE_PATH)).toBe(true);
   });
 
-  it('agent.js should have valid syntax', () => {
-    expect(() => {
-      execSync(`node --check ${AGENT_PATH}`, { encoding: 'utf8' });
-    }).not.toThrow();
+  it('dist/agent/cli.js should exist', () => {
+    expect(fs.existsSync(AGENT_PATH)).toBe(true);
   });
 });

@@ -19,6 +19,18 @@ export const E2E_KEYS_FILE = path.join(VIBE_DIR, 'e2e-keys.json');
 // Agent uses separate directory
 export const AGENT_DIR = path.join(os.homedir(), '.vibe-agent');
 export const AGENT_PORT_FILE = path.join(AGENT_DIR, 'port');
+export const AGENT_CONFIG_FILE = path.join(AGENT_DIR, 'config.json');
+export const AGENT_SESSION_HISTORY_FILE = path.join(AGENT_DIR, 'session-history.json');
+export const AGENT_PID_FILE = path.join(AGENT_DIR, 'pid');
+export const AGENT_START_TIME_FILE = path.join(AGENT_DIR, 'start_time');
+
+/**
+ * Agent-specific settings
+ */
+export const LOCAL_SERVER_PORT = 9999;
+export const PAIRING_URL = 'https://minivibeapp.com/pair';
+export const MAX_SESSION_HISTORY = 100;
+export const MAX_SESSION_HISTORY_AGE_DAYS = 30;
 
 /**
  * Firebase configuration (public - safe to embed in client code)
