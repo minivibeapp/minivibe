@@ -116,6 +116,11 @@ export function sendToBridge(ctx: AppContext, data: Record<string, unknown>): bo
 function handleBridgeMessage(ctx: AppContext, msg: Record<string, unknown>): void {
   const { log, logStatus } = ctx.callbacks;
 
+  // Debug: log all incoming messages (except pings)
+  if (msg.type !== 'ping' && msg.type !== 'pong') {
+    logStatus(`Bridge message: type=${msg.type}, hasContent=${msg.content !== undefined}`);
+  }
+
   switch (msg.type) {
     case 'authenticated':
       ctx.isAuthenticated = true;
@@ -131,7 +136,8 @@ function handleBridgeMessage(ctx: AppContext, msg: Record<string, unknown>): voi
       break;
 
     case 'session_registered':
-      logStatus(`Session registered: ${(msg.sessionId as string)?.slice(0, 8)}...`);
+      log(`Session registered: ${(msg.sessionId as string)?.slice(0, 8)}...`, colors.green);
+      logStatus(`Full sessionId: ${msg.sessionId}`);
       // Now send E2E key exchange (must be AFTER register_session)
       if (ctx.options.e2eEnabled && ctx.e2e) {
         ctx.e2e.init();
@@ -159,6 +165,7 @@ function handleBridgeMessage(ctx: AppContext, msg: Record<string, unknown>): voi
       break;
 
     case 'send_message':
+      log(`Received message from mobile`, colors.dim);
       handleUserMessage(ctx, msg);
       break;
 
@@ -225,41 +232,74 @@ function handleBridgeMessage(ctx: AppContext, msg: Record<string, unknown>): voi
  * Handle user message from mobile
  */
 function handleUserMessage(ctx: AppContext, msg: Record<string, unknown>): void {
+  const { log, logStatus } = ctx.callbacks;
   let content = msg.content as string;
+
+  logStatus(`handleUserMessage: content type=${typeof msg.content}, value="${String(msg.content).slice(0, 50)}..."`);
 
   // Decrypt if E2E
   if (ctx.e2e?.isReady()) {
     const obj = msg.content as Record<string, unknown>;
     if (obj?.e2e === true) {
-      try { content = ctx.e2e.decrypt(obj) as string; } catch { return; }
+      try {
+        content = ctx.e2e.decrypt(obj) as string;
+        logStatus('Decrypted E2E message');
+      } catch (err) {
+        logStatus(`E2E decrypt failed: ${err instanceof Error ? err.message : err}`);
+        return;
+      }
     }
+  }
+
+  // Validate content
+  if (!content || typeof content !== 'string') {
+    logStatus(`Invalid message content: ${typeof content}`);
+    return;
   }
 
   // Dedupe
   const hash = Buffer.from(content).toString('base64').slice(0, 32);
-  if (ctx.mobileMessageHashes.has(hash)) return;
+  if (ctx.mobileMessageHashes.has(hash)) {
+    logStatus('Duplicate message, skipping');
+    return;
+  }
   ctx.mobileMessageHashes.add(hash);
   if (ctx.mobileMessageHashes.size > MAX_MOBILE_MESSAGES) {
     const first = ctx.mobileMessageHashes.values().next().value;
     if (first) ctx.mobileMessageHashes.delete(first);
   }
 
-  ctx.callbacks.log(`[mobile]: ${content}`, colors.cyan);
-  ctx.callbacks.sendToClaude(content, 'mobile');
+  log(`[mobile]: ${content}`, colors.cyan);
+  logStatus(`Sending to Claude: isRunning=${ctx.isRunning}, hasProcess=${!!ctx.claudeProcess}, stdinWritable=${ctx.claudeProcess?.stdin?.writable}`);
+  const sent = ctx.callbacks.sendToClaude(content, 'mobile');
+  logStatus(`sendToClaude result: ${sent}`);
 }
 
 /**
  * Send to Claude stdin
  */
 export function sendToClaude(ctx: AppContext, content: string): boolean {
-  if (!ctx.claudeProcess?.stdin?.writable || !ctx.isRunning) return false;
+  const { logStatus } = ctx.callbacks;
+  if (!ctx.claudeProcess?.stdin?.writable) {
+    logStatus('sendToClaude: stdin not writable');
+    return false;
+  }
+  if (!ctx.isRunning) {
+    logStatus('sendToClaude: Claude not running');
+    return false;
+  }
   try {
+    logStatus(`sendToClaude: writing ${content.length} chars to stdin`);
     ctx.claudeProcess.stdin.write(Buffer.from(content, 'utf8'));
     setTimeout(() => {
-      ctx.claudeProcess?.stdin?.writable && ctx.claudeProcess.stdin.write('\r');
+      if (ctx.claudeProcess?.stdin?.writable) {
+        logStatus('sendToClaude: sending Enter key');
+        ctx.claudeProcess.stdin.write('\r');
+      }
     }, 100);
     return true;
-  } catch {
+  } catch (err) {
+    logStatus(`sendToClaude error: ${err instanceof Error ? err.message : err}`);
     return false;
   }
 }
