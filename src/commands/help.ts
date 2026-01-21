@@ -67,11 +67,8 @@ Options:
   --help, -h                  Show this help
 
 In-session Commands:
+  /whoami                     Show logged-in user
   /name <name>                Rename current session
-  /upload <path>              Upload file to cloud
-  /download <id>              Download file by ID
-  /files                      List uploaded files
-  /status                     Show connection status
   /info                       Show session details
   /help                       Show available commands
 

@@ -18,7 +18,7 @@ import {
   E2E_PENDING_TIMEOUT_MS,
 } from './utils/config';
 import { colors } from './utils/colors';
-import { refreshIdToken } from './auth';
+import { refreshIdToken, getUserInfo } from './auth';
 import { findClaudePath, getSessionFilePath } from './claude/process';
 import type { AppContext } from './context';
 import type { PermissionPrompt } from './claude/types';
@@ -527,6 +527,69 @@ function processSessionFile(ctx: AppContext, file: string): void {
 }
 
 /**
+ * Handle slash commands typed during session
+ * Returns true if command was handled, false to pass through to Claude
+ */
+function handleSlashCommand(ctx: AppContext, input: string): boolean {
+  const { log } = ctx.callbacks;
+  const trimmed = input.trim();
+  if (!trimmed.startsWith('/')) return false;
+
+  const parts = trimmed.split(/\s+/);
+  const cmd = parts[0].toLowerCase();
+  const args = parts.slice(1);
+
+  switch (cmd) {
+    case '/whoami': {
+      const user = getUserInfo();
+      if (user) {
+        log(`\n${colors.green}Logged in as:${colors.reset}`);
+        if (user.name) log(`  Name:  ${user.name}`);
+        if (user.email) log(`  Email: ${user.email}`);
+      } else {
+        log(`\n${colors.yellow}Not logged in${colors.reset}`);
+      }
+      log('');
+      return true;
+    }
+    case '/name': {
+      const newName = args.join(' ');
+      if (!newName) {
+        log(`\n${colors.yellow}Usage: /name <new-name>${colors.reset}\n`);
+        return true;
+      }
+      sendToBridge(ctx, {
+        type: 'rename_session',
+        sessionId: ctx.effectiveSessionId,
+        name: newName,
+      });
+      log(`\n${colors.green}Session renamed to: ${newName}${colors.reset}\n`);
+      return true;
+    }
+    case '/info': {
+      log(`\n${colors.bright}Session Info${colors.reset}`);
+      log(`  Session ID: ${ctx.effectiveSessionId}`);
+      log(`  Directory:  ${process.cwd()}`);
+      log(`  Connected:  ${ctx.isAuthenticated ? 'Yes' : 'No'}`);
+      log(`  E2E:        ${ctx.options.e2eEnabled ? (ctx.e2e?.isReady() ? 'Ready' : 'Pending') : 'Disabled'}`);
+      log('');
+      return true;
+    }
+    case '/help': {
+      log(`\n${colors.bright}Slash Commands${colors.reset}`);
+      log(`  /whoami     Show logged-in user`);
+      log(`  /name <n>   Rename session`);
+      log(`  /info       Show session details`);
+      log(`  /help       Show this help`);
+      log('');
+      return true;
+    }
+    default:
+      return false; // Unknown command, pass to Claude
+  }
+}
+
+/**
  * Setup terminal input forwarding
  */
 export function setupTerminalInput(ctx: AppContext): void {
@@ -534,8 +597,34 @@ export function setupTerminalInput(ctx: AppContext): void {
   process.stdin.setRawMode(true);
   terminalRawMode = true;
   process.stdin.resume();
+
   process.stdin.on('data', (data: Buffer) => {
-    if (data.toString() === '\x03') { cleanup(ctx); process.exit(0); }
+    const str = data.toString();
+
+    // Ctrl+C
+    if (str === '\x03') { cleanup(ctx); process.exit(0); }
+
+    // Buffer input to detect slash commands (Enter = \r or \n)
+    if (str === '\r' || str === '\n') {
+      if (ctx.inputBuffer.startsWith('/')) {
+        // Check if it's a slash command we handle
+        if (handleSlashCommand(ctx, ctx.inputBuffer)) {
+          ctx.inputBuffer = '';
+          // Echo newline but don't send to Claude
+          process.stdout.write('\n');
+          return;
+        }
+      }
+      ctx.inputBuffer = '';
+    } else if (str === '\x7f' || str === '\b') {
+      // Backspace - remove last char from buffer
+      ctx.inputBuffer = ctx.inputBuffer.slice(0, -1);
+    } else if (str.length === 1 && str >= ' ') {
+      // Printable character
+      ctx.inputBuffer += str;
+    }
+
+    // Pass through to Claude
     ctx.claudeProcess?.stdin?.writable && ctx.claudeProcess.stdin.write(data);
   });
 }

@@ -39,11 +39,8 @@ describe('CLI Integration Tests', () => {
       const output = execSync(`node ${VIBE_PATH} --help`, { encoding: 'utf8' });
 
       expect(output).toContain('In-session Commands');
+      expect(output).toContain('/whoami');
       expect(output).toContain('/name');
-      expect(output).toContain('/upload');
-      expect(output).toContain('/download');
-      expect(output).toContain('/files');
-      expect(output).toContain('/status');
       expect(output).toContain('/info');
       expect(output).toContain('/help');
     });
