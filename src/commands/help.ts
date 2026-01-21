@@ -70,6 +70,9 @@ In-session Commands:
   /whoami                     Show logged-in user
   /name <name>                Rename current session
   /info                       Show session details
+  /upload <path>              Upload file to cloud storage
+  /download <id> [-o path]    Download file by ID
+  /files                      List uploaded files
   /help                       Show available commands
 
 Examples:

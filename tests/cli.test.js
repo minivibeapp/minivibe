@@ -42,6 +42,9 @@ describe('CLI Integration Tests', () => {
       expect(output).toContain('/whoami');
       expect(output).toContain('/name');
       expect(output).toContain('/info');
+      expect(output).toContain('/upload');
+      expect(output).toContain('/download');
+      expect(output).toContain('/files');
       expect(output).toContain('/help');
     });
   });

@@ -20,6 +20,7 @@ import {
 import { colors } from './utils/colors';
 import { refreshIdToken, getUserInfo } from './auth';
 import { findClaudePath, getSessionFilePath } from './claude/process';
+import { slashCmdUpload, slashCmdDownload, slashCmdFiles } from './commands/files';
 import type { AppContext } from './context';
 import type { PermissionPrompt } from './claude/types';
 
@@ -531,6 +532,9 @@ const SLASH_COMMANDS = [
   { cmd: '/whoami', desc: 'Show logged-in user' },
   { cmd: '/name', desc: 'Rename current session' },
   { cmd: '/info', desc: 'Show session details' },
+  { cmd: '/upload', desc: 'Upload file to cloud' },
+  { cmd: '/download', desc: 'Download file by ID' },
+  { cmd: '/files', desc: 'List uploaded files' },
   { cmd: '/help', desc: 'Show available commands' },
 ];
 
@@ -663,12 +667,29 @@ function handleSlashCommand(ctx: AppContext, input: string): boolean {
       log('');
       return true;
     }
+    case '/upload': {
+      const filePath = args[0];
+      slashCmdUpload(filePath, ctx.bridgeSocket, log);
+      return true;
+    }
+    case '/download': {
+      const fileId = args[0];
+      slashCmdDownload(fileId, args.slice(1), ctx.bridgeSocket, log);
+      return true;
+    }
+    case '/files': {
+      slashCmdFiles(ctx.bridgeSocket, log);
+      return true;
+    }
     case '/help': {
       log(`\n${colors.bright}Slash Commands${colors.reset}`);
-      log(`  /whoami     Show logged-in user`);
-      log(`  /name <n>   Rename session`);
-      log(`  /info       Show session details`);
-      log(`  /help       Show this help`);
+      log(`  /whoami        Show logged-in user`);
+      log(`  /name <n>      Rename session`);
+      log(`  /info          Show session details`);
+      log(`  /upload <p>    Upload file to cloud`);
+      log(`  /download <id> Download file by ID`);
+      log(`  /files         List uploaded files`);
+      log(`  /help          Show this help`);
       log('');
       return true;
     }
