@@ -11,13 +11,14 @@
   "bugs": {
     "url": "https://github.com/minivibeapp/minivibe/issues"
   },
-  "main": "vibe.js",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
   "bin": {
-    "vibe": "./vibe.js",
+    "vibe": "./dist/cli.js",
     "vibe-agent": "./agent/agent.js"
   },
   "files": [
-    "vibe.js",
+    "dist/",
     "e2e.js",
     "pty-wrapper.py",
     "pty-wrapper-node.js",
@@ -31,8 +32,12 @@
   "scripts": {
     "start": "node vibe.js",
     "agent": "node agent/agent.js",
+    "build": "tsc",
+    "build:watch": "tsc --watch",
+    "prepublishOnly": "npm run build",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "uuid": "^9.0.0",
@@ -54,6 +59,10 @@
   ],
   "license": "MIT",
   "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/uuid": "^10.0.0",
+    "@types/ws": "^8.5.0",
+    "typescript": "^5.3.0",
     "vitest": "^4.0.17"
   }
 }
