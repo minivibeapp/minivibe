@@ -538,84 +538,14 @@ const SLASH_COMMANDS = [
   { cmd: '/help', desc: 'Show available commands' },
 ];
 
-// Autocomplete state
-let autocompleteVisible = false;
-let autocompleteIndex = 0;
-let autocompleteMatches: typeof SLASH_COMMANDS = [];
-
 /**
- * Get matching slash commands for autocomplete
+ * Get matching slash commands for Tab completion
+ * Note: No visual dropdown to avoid conflicts with Claude Code's native autocomplete
  */
 function getSlashMatches(input: string): typeof SLASH_COMMANDS {
   if (!input.startsWith('/')) return [];
   const prefix = input.toLowerCase();
   return SLASH_COMMANDS.filter(c => c.cmd.startsWith(prefix));
-}
-
-/**
- * Render autocomplete dropdown
- */
-function renderAutocomplete(input: string): void {
-  const newMatches = getSlashMatches(input);
-  if (newMatches.length === 0 || input.includes(' ')) {
-    hideAutocomplete();
-    return;
-  }
-
-  // Clear old dropdown first if visible (to avoid artifacts)
-  if (autocompleteVisible) {
-    hideAutocomplete();
-  }
-
-  autocompleteMatches = newMatches;
-
-  // Clamp index to valid range
-  if (autocompleteIndex >= autocompleteMatches.length) {
-    autocompleteIndex = 0;
-  }
-
-  // Save cursor, move to next line
-  process.stdout.write('\x1b[s'); // Save cursor
-  process.stdout.write('\n'); // Move down
-
-  // Render each match
-  for (let i = 0; i < autocompleteMatches.length; i++) {
-    const match = autocompleteMatches[i];
-    const isSelected = i === autocompleteIndex;
-    const prefix = isSelected ? `${colors.cyan}` : `${colors.dim}`;
-    const cmdPart = match.cmd.padEnd(12);
-    const descPart = match.desc;
-    process.stdout.write(`${prefix}${cmdPart}${colors.reset} ${colors.dim}${descPart}${colors.reset}\n`);
-  }
-
-  // Restore cursor
-  process.stdout.write(`\x1b[${autocompleteMatches.length + 1}A`); // Move up
-  process.stdout.write('\x1b[u'); // Restore cursor
-
-  autocompleteVisible = true;
-}
-
-/**
- * Hide autocomplete dropdown
- */
-function hideAutocomplete(): void {
-  if (!autocompleteVisible) return;
-
-  // Save length before clearing
-  const linesToClear = autocompleteMatches.length + 1;
-
-  // Reset state first
-  autocompleteVisible = false;
-  autocompleteMatches = [];
-  autocompleteIndex = 0;
-
-  // Save cursor, clear lines below
-  process.stdout.write('\x1b[s'); // Save cursor
-  for (let i = 0; i < linesToClear; i++) {
-    process.stdout.write('\n\x1b[2K'); // Move down and clear line
-  }
-  process.stdout.write(`\x1b[${linesToClear}A`); // Move back up
-  process.stdout.write('\x1b[u'); // Restore cursor
 }
 
 /**
@@ -706,6 +636,7 @@ function handleSlashCommand(ctx: AppContext, input: string): boolean {
 
 /**
  * Setup terminal input forwarding
+ * Note: No visual autocomplete dropdown to avoid conflicts with Claude Code's native UI
  */
 export function setupTerminalInput(ctx: AppContext): void {
   if (!process.stdin.isTTY) return;
@@ -716,52 +647,30 @@ export function setupTerminalInput(ctx: AppContext): void {
   process.stdin.on('data', (data: Buffer) => {
     const str = data.toString();
 
-    // Ctrl+C - hide autocomplete before cleanup
+    // Ctrl+C - cleanup and exit
     if (str === '\x03') {
-      hideAutocomplete();
       cleanup(ctx);
       process.exit(0);
     }
 
-    // Check for arrow keys and Tab when autocomplete is visible
-    if (autocompleteVisible && autocompleteMatches.length > 0) {
-      // Arrow down: \x1b[B
-      if (str === '\x1b[B' || str === '\x1bOB') {
-        autocompleteIndex = (autocompleteIndex + 1) % autocompleteMatches.length;
-        renderAutocomplete(ctx.inputBuffer);
-        return;
-      }
-      // Arrow up: \x1b[A
-      if (str === '\x1b[A' || str === '\x1bOA') {
-        autocompleteIndex = (autocompleteIndex - 1 + autocompleteMatches.length) % autocompleteMatches.length;
-        renderAutocomplete(ctx.inputBuffer);
-        return;
-      }
-      // Tab: complete selected command
-      if (str === '\t') {
-        const selected = autocompleteMatches[autocompleteIndex];
-        if (selected) {
-          // Calculate how many chars to add
-          const toAdd = selected.cmd.slice(ctx.inputBuffer.length);
-          ctx.inputBuffer = selected.cmd;
-          // Echo the completion
+    // Tab: silent completion for vibe slash commands
+    if (str === '\t' && ctx.inputBuffer.startsWith('/')) {
+      const matches = getSlashMatches(ctx.inputBuffer);
+      if (matches.length === 1) {
+        // Single match - complete it
+        const toAdd = matches[0].cmd.slice(ctx.inputBuffer.length);
+        if (toAdd) {
+          ctx.inputBuffer += toAdd;
           process.stdout.write(toAdd);
-          // Send to Claude too
           ctx.claudeProcess?.stdin?.writable && ctx.claudeProcess.stdin.write(toAdd);
-          hideAutocomplete();
         }
-        return;
+        return; // Don't pass Tab to Claude
       }
-      // Escape: dismiss autocomplete
-      if (str === '\x1b') {
-        hideAutocomplete();
-        return;
-      }
+      // Multiple or no matches - let Claude handle Tab
     }
 
     // Buffer input to detect slash commands (Enter = \r or \n)
     if (str === '\r' || str === '\n') {
-      hideAutocomplete();
       if (ctx.inputBuffer.startsWith('/')) {
         // Check if it's a slash command we handle
         if (handleSlashCommand(ctx, ctx.inputBuffer)) {
@@ -775,19 +684,9 @@ export function setupTerminalInput(ctx: AppContext): void {
     } else if (str === '\x7f' || str === '\b') {
       // Backspace - remove last char from buffer
       ctx.inputBuffer = ctx.inputBuffer.slice(0, -1);
-      // Update autocomplete
-      if (ctx.inputBuffer.startsWith('/')) {
-        renderAutocomplete(ctx.inputBuffer);
-      } else {
-        hideAutocomplete();
-      }
     } else if (str.length === 1 && str >= ' ') {
       // Printable character
       ctx.inputBuffer += str;
-      // Show autocomplete for slash commands
-      if (ctx.inputBuffer.startsWith('/')) {
-        renderAutocomplete(ctx.inputBuffer);
-      }
     }
 
     // Pass through to Claude
@@ -810,7 +709,6 @@ export function setupShutdown(ctx: AppContext): void {
  */
 export function cleanup(ctx: AppContext): void {
   ctx.isShuttingDown = true;
-  hideAutocomplete();
   if (ctx.heartbeatTimer) clearInterval(ctx.heartbeatTimer);
   if (ctx.reconnectTimer) clearTimeout(ctx.reconnectTimer);
   if (ctx.sessionFileWatcher) ctx.sessionFileWatcher();
