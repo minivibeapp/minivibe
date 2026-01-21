@@ -1,6 +1,6 @@
 {
   "name": "minivibe",
-  "version": "0.2.26",
+  "version": "0.2.27",
   "description": "CLI wrapper for Claude Code with mobile remote control via MiniVibe iOS app",
   "author": "MiniVibe <hello@minivibeapp.com>",
   "homepage": "https://github.com/minivibeapp/minivibe",
@@ -36,7 +36,8 @@
     "prepublishOnly": "npm run build",
     "test": "vitest run",
     "test:watch": "vitest",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "dev": "npx tsx src/cli.ts"
   },
   "dependencies": {
     "uuid": "^9.0.0",

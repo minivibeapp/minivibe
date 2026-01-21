@@ -57,7 +57,10 @@ export function connectToBridge(ctx: AppContext): void {
 
   ctx.bridgeSocket.on('message', (raw) => {
     try {
-      handleBridgeMessage(ctx, JSON.parse(raw.toString()));
+      const rawStr = raw.toString();
+      // Log raw messages in verbose mode only
+      logStatus(`[RAW] ${rawStr.slice(0, 200)}${rawStr.length > 200 ? '...' : ''}`);
+      handleBridgeMessage(ctx, JSON.parse(rawStr));
     } catch (err) {
       logStatus(`Invalid bridge message: ${err instanceof Error ? err.message : err}`);
     }
@@ -232,10 +235,8 @@ function handleBridgeMessage(ctx: AppContext, msg: Record<string, unknown>): voi
  * Handle user message from mobile
  */
 function handleUserMessage(ctx: AppContext, msg: Record<string, unknown>): void {
-  const { log, logStatus } = ctx.callbacks;
+  const { log } = ctx.callbacks;
   let content = msg.content as string;
-
-  logStatus(`handleUserMessage: content type=${typeof msg.content}, value="${String(msg.content).slice(0, 50)}..."`);
 
   // Decrypt if E2E
   if (ctx.e2e?.isReady()) {
@@ -243,9 +244,7 @@ function handleUserMessage(ctx: AppContext, msg: Record<string, unknown>): void 
     if (obj?.e2e === true) {
       try {
         content = ctx.e2e.decrypt(obj) as string;
-        logStatus('Decrypted E2E message');
-      } catch (err) {
-        logStatus(`E2E decrypt failed: ${err instanceof Error ? err.message : err}`);
+      } catch {
         return;
       }
     }
@@ -253,14 +252,12 @@ function handleUserMessage(ctx: AppContext, msg: Record<string, unknown>): void 
 
   // Validate content
   if (!content || typeof content !== 'string') {
-    logStatus(`Invalid message content: ${typeof content}`);
     return;
   }
 
   // Dedupe
   const hash = Buffer.from(content).toString('base64').slice(0, 32);
   if (ctx.mobileMessageHashes.has(hash)) {
-    logStatus('Duplicate message, skipping');
     return;
   }
   ctx.mobileMessageHashes.add(hash);
@@ -270,36 +267,25 @@ function handleUserMessage(ctx: AppContext, msg: Record<string, unknown>): void 
   }
 
   log(`[mobile]: ${content}`, colors.cyan);
-  logStatus(`Sending to Claude: isRunning=${ctx.isRunning}, hasProcess=${!!ctx.claudeProcess}, stdinWritable=${ctx.claudeProcess?.stdin?.writable}`);
-  const sent = ctx.callbacks.sendToClaude(content, 'mobile');
-  logStatus(`sendToClaude result: ${sent}`);
+  ctx.callbacks.sendToClaude(content, 'mobile');
 }
 
 /**
  * Send to Claude stdin
  */
 export function sendToClaude(ctx: AppContext, content: string): boolean {
-  const { logStatus } = ctx.callbacks;
-  if (!ctx.claudeProcess?.stdin?.writable) {
-    logStatus('sendToClaude: stdin not writable');
-    return false;
-  }
-  if (!ctx.isRunning) {
-    logStatus('sendToClaude: Claude not running');
+  if (!ctx.claudeProcess?.stdin?.writable || !ctx.isRunning) {
     return false;
   }
   try {
-    logStatus(`sendToClaude: writing ${content.length} chars to stdin`);
     ctx.claudeProcess.stdin.write(Buffer.from(content, 'utf8'));
     setTimeout(() => {
       if (ctx.claudeProcess?.stdin?.writable) {
-        logStatus('sendToClaude: sending Enter key');
         ctx.claudeProcess.stdin.write('\r');
       }
     }, 100);
     return true;
-  } catch (err) {
-    logStatus(`sendToClaude error: ${err instanceof Error ? err.message : err}`);
+  } catch {
     return false;
   }
 }
@@ -352,21 +338,36 @@ export function startClaude(ctx: AppContext): void {
     for (const line of lines) {
       try {
         const p = JSON.parse(line) as PermissionPrompt;
-        if (p.type === 'permission_prompt') {
+        if (p.type === 'permission_prompt' && p.tool_name) {
+          // Store pending permission for approval/denial
+          ctx.pendingPermission = {
+            command: p.tool_name,
+            timestamp: Date.now(),
+          };
+          // Send permission request in format expected by bridge/clients
           sendToBridge(ctx, {
             type: 'permission_request',
             sessionId: ctx.effectiveSessionId,
-            tool_name: p.tool_name,
-            tool_input: p.tool_input,
-            prompt_id: p.prompt_id,
+            requestId: p.prompt_id || uuidv4(),
+            command: p.tool_name,
+            question: p.question || `Allow ${p.tool_name}?`,
+            displayText: p.tool_name,
+            fullText: JSON.stringify(p.tool_input || {}, null, 2),
           });
         }
       } catch { /* not json */ }
     }
   });
 
-  ctx.claudeProcess.on('exit', (code) => {
+  ctx.claudeProcess.on('exit', (code, signal) => {
     ctx.isRunning = false;
+    // Notify bridge that session ended
+    sendToBridge(ctx, {
+      type: 'session_ended',
+      sessionId: ctx.effectiveSessionId,
+      exitCode: code,
+      signal: signal || undefined,
+    });
     cleanup(ctx);
     process.exit(code || 0);
   });
