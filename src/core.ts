@@ -552,13 +552,20 @@ function getSlashMatches(input: string): typeof SLASH_COMMANDS {
  * Render autocomplete dropdown
  */
 function renderAutocomplete(input: string): void {
-  autocompleteMatches = getSlashMatches(input);
-  if (autocompleteMatches.length === 0 || input.includes(' ')) {
+  const newMatches = getSlashMatches(input);
+  if (newMatches.length === 0 || input.includes(' ')) {
     hideAutocomplete();
     return;
   }
 
-  // Clamp index
+  // Clear old dropdown first if visible (to avoid artifacts)
+  if (autocompleteVisible) {
+    hideAutocomplete();
+  }
+
+  autocompleteMatches = newMatches;
+
+  // Clamp index to valid range
   if (autocompleteIndex >= autocompleteMatches.length) {
     autocompleteIndex = 0;
   }
@@ -590,17 +597,21 @@ function renderAutocomplete(input: string): void {
 function hideAutocomplete(): void {
   if (!autocompleteVisible) return;
 
-  // Save cursor, clear lines below
-  process.stdout.write('\x1b[s'); // Save cursor
-  for (let i = 0; i < autocompleteMatches.length + 1; i++) {
-    process.stdout.write('\n\x1b[2K'); // Move down and clear line
-  }
-  process.stdout.write(`\x1b[${autocompleteMatches.length + 1}A`); // Move back up
-  process.stdout.write('\x1b[u'); // Restore cursor
+  // Save length before clearing
+  const linesToClear = autocompleteMatches.length + 1;
 
+  // Reset state first
   autocompleteVisible = false;
   autocompleteMatches = [];
   autocompleteIndex = 0;
+
+  // Save cursor, clear lines below
+  process.stdout.write('\x1b[s'); // Save cursor
+  for (let i = 0; i < linesToClear; i++) {
+    process.stdout.write('\n\x1b[2K'); // Move down and clear line
+  }
+  process.stdout.write(`\x1b[${linesToClear}A`); // Move back up
+  process.stdout.write('\x1b[u'); // Restore cursor
 }
 
 /**
@@ -678,11 +689,15 @@ export function setupTerminalInput(ctx: AppContext): void {
   process.stdin.on('data', (data: Buffer) => {
     const str = data.toString();
 
-    // Ctrl+C
-    if (str === '\x03') { cleanup(ctx); process.exit(0); }
+    // Ctrl+C - hide autocomplete before cleanup
+    if (str === '\x03') {
+      hideAutocomplete();
+      cleanup(ctx);
+      process.exit(0);
+    }
 
     // Check for arrow keys and Tab when autocomplete is visible
-    if (autocompleteVisible) {
+    if (autocompleteVisible && autocompleteMatches.length > 0) {
       // Arrow down: \x1b[B
       if (str === '\x1b[B' || str === '\x1bOB') {
         autocompleteIndex = (autocompleteIndex + 1) % autocompleteMatches.length;
@@ -768,6 +783,7 @@ export function setupShutdown(ctx: AppContext): void {
  */
 export function cleanup(ctx: AppContext): void {
   ctx.isShuttingDown = true;
+  hideAutocomplete();
   if (ctx.heartbeatTimer) clearInterval(ctx.heartbeatTimer);
   if (ctx.reconnectTimer) clearTimeout(ctx.reconnectTimer);
   if (ctx.sessionFileWatcher) ctx.sessionFileWatcher();
