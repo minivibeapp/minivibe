@@ -7,6 +7,7 @@ import { spawn } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import WebSocket from 'ws';
+import { v4 as uuidv4 } from 'uuid';
 
 import {
   DEFAULT_BRIDGE_URL,
@@ -305,6 +306,40 @@ function startSessionWatcher(ctx: AppContext): void {
 }
 
 /**
+ * Extract text content from Claude message content array
+ */
+function extractTextContent(content: unknown): string {
+  if (typeof content === 'string') return content;
+  if (!Array.isArray(content)) return '';
+
+  const parts: string[] = [];
+  for (const block of content) {
+    if (block.type === 'text' && block.text) {
+      parts.push(block.text);
+    } else if (block.type === 'tool_use') {
+      // Format tool use for display
+      let desc = `**${block.name}**`;
+      if (block.input) {
+        if (block.name === 'Bash' && block.input.command) {
+          desc += `\n\`\`\`\n${block.input.command}\n\`\`\``;
+        } else if ((block.name === 'Read' || block.name === 'Write' || block.name === 'Edit') && block.input.file_path) {
+          desc += `: ${block.input.file_path}`;
+        }
+      }
+      parts.push(desc);
+    } else if (block.type === 'tool_result' && block.content) {
+      const result = typeof block.content === 'string' ? block.content : JSON.stringify(block.content);
+      if (result.length < 1000) {
+        parts.push(`*Result:*\n${result}`);
+      } else {
+        parts.push(`*Result:* (${result.length} chars)`);
+      }
+    }
+  }
+  return parts.join('\n\n');
+}
+
+/**
  * Process session file for new messages
  */
 function processSessionFile(ctx: AppContext, file: string): void {
@@ -319,13 +354,28 @@ function processSessionFile(ctx: AppContext, file: string): void {
       if (!line.trim()) continue;
       try {
         const msg = JSON.parse(line);
-        if (msg.type === 'assistant' && msg.message) {
-          sendToBridge(ctx, { type: 'claude_message', sessionId: ctx.effectiveSessionId, message: msg.message });
+        const role = msg.type; // 'user' or 'assistant'
+        const msgContent = msg.message?.content;
+
+        // Extract text content
+        const textContent = extractTextContent(msgContent);
+        if (textContent.trim()) {
+          // Send formatted message to bridge (matching old format expected by web client)
+          sendToBridge(ctx, {
+            type: 'claude_message',
+            sessionId: ctx.effectiveSessionId,
+            message: {
+              id: msg.uuid || uuidv4(),
+              sender: role === 'user' ? 'user' : 'claude',
+              content: textContent,
+              timestamp: new Date().toISOString(),
+            },
+          });
         }
+
         // Track completed tools
-        const content = msg.message?.content;
-        if (Array.isArray(content)) {
-          for (const b of content) {
+        if (Array.isArray(msgContent)) {
+          for (const b of msgContent) {
             if (b.type === 'tool_result' && b.tool_use_id) {
               ctx.completedToolIds.add(b.tool_use_id);
               if (ctx.completedToolIds.size > MAX_COMPLETED_TOOLS) {
