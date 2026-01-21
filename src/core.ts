@@ -384,10 +384,13 @@ export function startClaude(ctx: AppContext): void {
  * Watch session file for Claude messages
  */
 function startSessionWatcher(ctx: AppContext): void {
+  const { logStatus } = ctx.callbacks;
   const sessionFile = getSessionFilePath(ctx.sessionId);
+  logStatus(`Watching for session file: ${sessionFile}`);
   const check = setInterval(() => {
     if (fs.existsSync(sessionFile)) {
       clearInterval(check);
+      logStatus(`Session file found, starting watcher`);
       try {
         const watcher = fs.watch(sessionFile, () => processSessionFile(ctx, sessionFile));
         ctx.sessionFileWatcher = () => watcher.close();
@@ -436,6 +439,7 @@ function extractTextContent(content: unknown): string {
  * Process session file for new messages
  */
 function processSessionFile(ctx: AppContext, file: string): void {
+  const { logStatus } = ctx.callbacks;
   try {
     const stats = fs.statSync(file);
 
@@ -455,6 +459,7 @@ function processSessionFile(ctx: AppContext, file: string): void {
 
     const newContent = buffer.toString('utf8');
     const lines = newContent.split('\n').filter(l => l.trim());
+    logStatus(`Processing ${lines.length} lines from session file`);
 
     for (const line of lines) {
       try {
@@ -465,8 +470,9 @@ function processSessionFile(ctx: AppContext, file: string): void {
         // Extract text content
         const textContent = extractTextContent(msgContent);
         if (textContent.trim()) {
+          logStatus(`Sending ${role} message to bridge (${textContent.length} chars)`);
           // Send formatted message to bridge (matching old format expected by web client)
-          sendToBridge(ctx, {
+          const sent = sendToBridge(ctx, {
             type: 'claude_message',
             sessionId: ctx.effectiveSessionId,
             message: {
@@ -476,6 +482,9 @@ function processSessionFile(ctx: AppContext, file: string): void {
               timestamp: new Date().toISOString(),
             },
           });
+          if (!sent) {
+            logStatus(`Failed to send message (not authenticated or disconnected)`);
+          }
         }
 
         // Track completed tools

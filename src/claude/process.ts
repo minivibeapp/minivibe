@@ -38,9 +38,46 @@ export function findClaudePath(): string {
 }
 
 /**
- * Get the expected session file path
+ * Get the session file path
+ * Tries multiple naming strategies and scans directories to find the file
  */
 export function getSessionFilePath(sessionId: string): string {
-  const projectPath = process.cwd().replace(/\//g, '-').replace(/^-/, '');
-  return path.join(os.homedir(), '.claude', 'projects', projectPath, `${sessionId}.jsonl`);
+  const cwd = process.cwd();
+  const projectsDir = path.join(os.homedir(), '.claude', 'projects');
+
+  // Normalize path separators (handle both Windows \ and Unix /)
+  // Strategy 1: Direct replacement (e.g., /home/ubuntu -> -home-ubuntu, C:\Users -> C--Users)
+  const directHash = cwd.replace(/[\\/]/g, '-');
+  // Strategy 2: Without leading dash (e.g., home-ubuntu)
+  const noLeadingDash = directHash.replace(/^-/, '');
+  // Strategy 3: Windows drive letter normalization (e.g., C:-Users -> C-Users)
+  const normalizedWindows = noLeadingDash.replace(/^([A-Za-z]):-/, '$1-');
+
+  const candidates = [noLeadingDash, directHash, normalizedWindows];
+
+  // Try to find existing directory that matches
+  if (fs.existsSync(projectsDir)) {
+    for (const candidate of candidates) {
+      const candidateDir = path.join(projectsDir, candidate);
+      if (fs.existsSync(candidateDir)) {
+        return path.join(candidateDir, `${sessionId}.jsonl`);
+      }
+    }
+
+    // Scan for session file in any project directory
+    try {
+      const dirs = fs.readdirSync(projectsDir);
+      for (const dir of dirs) {
+        const sessionFile = path.join(projectsDir, dir, `${sessionId}.jsonl`);
+        if (fs.existsSync(sessionFile)) {
+          return sessionFile;
+        }
+      }
+    } catch {
+      // Ignore scan errors
+    }
+  }
+
+  // Fall back to noLeadingDash (will be created by Claude)
+  return path.join(projectsDir, noLeadingDash, `${sessionId}.jsonl`);
 }
