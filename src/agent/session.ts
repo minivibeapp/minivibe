@@ -14,14 +14,27 @@ import type { BridgeMessage } from './types';
  * Find vibe CLI executable
  */
 export function findVibeCli(): string | null {
+  // Try to find via which/where first (most reliable when installed via npm)
+  try {
+    const cmd = process.platform === 'win32' ? 'where vibe' : 'which vibe';
+    const result = execSync(cmd, { encoding: 'utf8' }).trim();
+    const found = result.split('\n')[0].trim();
+    if (found && fs.existsSync(found)) {
+      return found;
+    }
+  } catch {
+    // Not found via which/where, try local paths
+  }
+
+  // Local development paths (dist/cli.js structure)
   const locations = [
-    path.join(__dirname, '..', '..', 'vibe-cli', 'vibe.js'),
-    path.join(os.homedir(), 'vibe-cli', 'vibe.js'),
+    path.join(__dirname, '..', 'cli.js'), // Same dist/ directory
+    path.join(__dirname, '..', '..', 'dist', 'cli.js'), // Parent dist/
   ];
 
   // Add platform-specific locations
   if (process.platform === 'win32') {
-    locations.push(path.join(os.homedir(), 'AppData', 'Local', 'vibe-cli', 'vibe.js'));
+    locations.push(path.join(os.homedir(), 'AppData', 'Local', 'minivibe', 'dist', 'cli.js'));
   } else {
     locations.push('/usr/local/bin/vibe');
   }
@@ -32,14 +45,7 @@ export function findVibeCli(): string | null {
     }
   }
 
-  // Try to find via which/where
-  try {
-    const cmd = process.platform === 'win32' ? 'where vibe' : 'which vibe';
-    const result = execSync(cmd, { encoding: 'utf8' }).trim();
-    return result.split('\n')[0].trim();
-  } catch {
-    return null;
-  }
+  return null;
 }
 
 /**

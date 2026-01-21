@@ -10,7 +10,7 @@ import { v4 as uuidv4 } from 'uuid';
 
 import { DEFAULT_BRIDGE_URL, DEFAULT_AGENT_URL, AGENT_PORT_FILE } from './utils/config';
 import { colors } from './utils/colors';
-import { clearAuth, ensureValidToken, startLoginFlow, startHeadlessLogin, getUserInfo } from './auth';
+import { clearAuth, ensureValidToken, startLoginFlow, startHeadlessLogin, getUserInfo, getStoredAuth } from './auth';
 import { showWelcomeMessage, showClaudeNotFoundMessage, showHelp } from './commands/help';
 import { checkClaudeInstalled } from './claude/process';
 import { createAppContext, createDefaultOptions, type CliOptions, type SubcommandMode } from './context';
@@ -107,7 +107,15 @@ async function main(): Promise<void> {
   // Simple modes
   if (options.helpMode) { showHelp(); process.exit(0); }
   if (options.loginMode) { await (options.headlessMode ? startHeadlessLogin() : startLoginFlow()); return; }
-  if (options.logoutMode) { clearAuth(); console.log('Logged out'); process.exit(0); }
+  if (options.logoutMode) {
+    if (getStoredAuth()) {
+      clearAuth();
+      console.log(`${colors.green}Logged out successfully${colors.reset}`);
+    } else {
+      console.log(`${colors.yellow}Not logged in${colors.reset}`);
+    }
+    process.exit(0);
+  }
   if (options.whoamiMode) {
     const user = getUserInfo();
     if (!user) {

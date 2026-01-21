@@ -389,7 +389,8 @@ async function main(): Promise<void> {
 
   // Logout flow
   if (options.logout) {
-    if (clearAuth()) {
+    if (getStoredAuth()) {
+      clearAuth();
       log('Logged out successfully', colors.green);
     } else {
       log('Not logged in', colors.yellow);
