@@ -1,6 +1,6 @@
 {
   "name": "minivibe",
-  "version": "0.2.29",
+  "version": "0.2.30",
   "description": "CLI wrapper for Claude Code with mobile remote control via MiniVibe iOS app",
   "author": "MiniVibe <hello@minivibeapp.com>",
   "homepage": "https://github.com/minivibeapp/minivibe",

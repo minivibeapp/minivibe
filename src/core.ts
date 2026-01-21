@@ -23,6 +23,28 @@ import { findClaudePath, getSessionFilePath } from './claude/process';
 import type { AppContext } from './context';
 import type { PermissionPrompt } from './claude/types';
 
+// Track if terminal was put in raw mode
+let terminalRawMode = false;
+
+/**
+ * Restore terminal state (can be called multiple times safely)
+ */
+function restoreTerminal(): void {
+  if (terminalRawMode && process.stdin.isTTY) {
+    try {
+      process.stdin.setRawMode(false);
+    } catch {
+      // Ignore - stdin may already be closed
+    }
+    terminalRawMode = false;
+  }
+  // Show cursor (safe to call multiple times)
+  process.stdout.write('\x1b[?25h');
+}
+
+// Ensure terminal is always restored on exit (handles uncaught exceptions, etc.)
+process.on('exit', restoreTerminal);
+
 /**
  * Connect to bridge server and set up handlers
  */
@@ -510,6 +532,7 @@ function processSessionFile(ctx: AppContext, file: string): void {
 export function setupTerminalInput(ctx: AppContext): void {
   if (!process.stdin.isTTY) return;
   process.stdin.setRawMode(true);
+  terminalRawMode = true;
   process.stdin.resume();
   process.stdin.on('data', (data: Buffer) => {
     if (data.toString() === '\x03') { cleanup(ctx); process.exit(0); }
@@ -537,11 +560,5 @@ export function cleanup(ctx: AppContext): void {
   if (ctx.sessionFileWatcher) ctx.sessionFileWatcher();
   if (ctx.bridgeSocket) ctx.bridgeSocket.close();
   if (ctx.claudeProcess && !ctx.claudeProcess.killed) ctx.claudeProcess.kill('SIGTERM');
-
-  // Restore terminal state
-  if (process.stdin.isTTY) {
-    process.stdin.setRawMode(false);
-  }
-  // Show cursor (in case it was hidden)
-  process.stdout.write('\x1b[?25h');
+  restoreTerminal();
 }
