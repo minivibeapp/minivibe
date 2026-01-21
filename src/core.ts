@@ -397,13 +397,25 @@ function extractTextContent(content: unknown): string {
 function processSessionFile(ctx: AppContext, file: string): void {
   try {
     const stats = fs.statSync(file);
+
+    // Handle file being recreated (size shrunk)
+    if (stats.size < ctx.lastFileSize) {
+      ctx.lastFileSize = 0;
+    }
+
     if (stats.size <= ctx.lastFileSize) return;
-    const content = fs.readFileSync(file, 'utf8');
-    const lines = content.split('\n').slice(ctx.lastFileSize > 0 ? -10 : 0);
+
+    // Read only new bytes from the file
+    const fd = fs.openSync(file, 'r');
+    const buffer = Buffer.alloc(stats.size - ctx.lastFileSize);
+    fs.readSync(fd, buffer, 0, buffer.length, ctx.lastFileSize);
+    fs.closeSync(fd);
     ctx.lastFileSize = stats.size;
 
+    const newContent = buffer.toString('utf8');
+    const lines = newContent.split('\n').filter(l => l.trim());
+
     for (const line of lines) {
-      if (!line.trim()) continue;
       try {
         const msg = JSON.parse(line);
         const role = msg.type; // 'user' or 'assistant'
