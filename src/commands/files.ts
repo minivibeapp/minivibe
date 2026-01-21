@@ -4,11 +4,15 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
+import * as http from 'http';
 import * as https from 'https';
 import { URL } from 'url';
 import WebSocket from 'ws';
 
 import { colors } from '../utils/colors';
+
+// Maximum file size for upload (50MB)
+const MAX_UPLOAD_SIZE = 50 * 1024 * 1024;
 
 /**
  * Get MIME type from filename
@@ -121,12 +125,27 @@ export async function slashCmdUpload(
     return;
   }
 
+  if (stats.size > MAX_UPLOAD_SIZE) {
+    log(`\n${colors.red}File too large (max ${formatSize(MAX_UPLOAD_SIZE)})${colors.reset}\n`);
+    return;
+  }
+
+  if (stats.size === 0) {
+    log(`\n${colors.red}Cannot upload empty file${colors.reset}\n`);
+    return;
+  }
+
   if (!ws || ws.readyState !== WebSocket.OPEN) {
     log(`\n${colors.yellow}Not connected to bridge${colors.reset}\n`);
     return;
   }
 
   const fileName = path.basename(fullPath);
+  if (!fileName) {
+    log(`\n${colors.red}Invalid file path${colors.reset}\n`);
+    return;
+  }
+
   const fileSize = stats.size;
   const mimeType = getMimeType(fileName);
 
@@ -148,10 +167,12 @@ export async function slashCmdUpload(
     // Upload to S3
     const fileData = fs.readFileSync(fullPath);
     const parsedUrl = new URL(uploadUrl);
+    const httpModule = parsedUrl.protocol === 'https:' ? https : http;
 
     await new Promise<void>((resolve, reject) => {
-      const req = https.request({
+      const req = httpModule.request({
         hostname: parsedUrl.hostname,
+        port: parsedUrl.port || (parsedUrl.protocol === 'https:' ? 443 : 80),
         path: parsedUrl.pathname + parsedUrl.search,
         method: 'PUT',
         headers: {
@@ -233,9 +254,11 @@ export async function slashCmdDownload(
 
     // Download from URL
     const parsedUrl = new URL(downloadUrl);
+    const httpModule = parsedUrl.protocol === 'https:' ? https : http;
     const fileData = await new Promise<Buffer>((resolve, reject) => {
-      https.get({
+      httpModule.get({
         hostname: parsedUrl.hostname,
+        port: parsedUrl.port || (parsedUrl.protocol === 'https:' ? 443 : 80),
         path: parsedUrl.pathname + parsedUrl.search,
       }, (res) => {
         if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {

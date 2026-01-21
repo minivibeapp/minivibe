@@ -669,16 +669,22 @@ function handleSlashCommand(ctx: AppContext, input: string): boolean {
     }
     case '/upload': {
       const filePath = args[0];
-      slashCmdUpload(filePath, ctx.bridgeSocket, log);
+      slashCmdUpload(filePath, ctx.bridgeSocket, log).catch((err) => {
+        log(`${colors.red}Upload error: ${err.message}${colors.reset}\n`);
+      });
       return true;
     }
     case '/download': {
       const fileId = args[0];
-      slashCmdDownload(fileId, args.slice(1), ctx.bridgeSocket, log);
+      slashCmdDownload(fileId, args.slice(1), ctx.bridgeSocket, log).catch((err) => {
+        log(`${colors.red}Download error: ${err.message}${colors.reset}\n`);
+      });
       return true;
     }
     case '/files': {
-      slashCmdFiles(ctx.bridgeSocket, log);
+      slashCmdFiles(ctx.bridgeSocket, log).catch((err) => {
+        log(`${colors.red}List files error: ${err.message}${colors.reset}\n`);
+      });
       return true;
     }
     case '/help': {
