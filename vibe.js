@@ -200,6 +200,36 @@ async function refreshIdToken() {
   }
 }
 
+// Check if JWT token is expired or will expire within given seconds
+function isTokenExpired(token, bufferSeconds = 60) {
+  if (!token) return true;
+  try {
+    // Decode JWT payload (middle part)
+    const payload = JSON.parse(Buffer.from(token.split('.')[1], 'base64').toString());
+    const now = Math.floor(Date.now() / 1000);
+    return payload.exp <= (now + bufferSeconds);
+  } catch (err) {
+    return true; // Treat invalid tokens as expired
+  }
+}
+
+// Proactively refresh token if expired or close to expiry
+async function ensureValidToken() {
+  const auth = getStoredAuth();
+  if (!auth?.idToken) return null;
+
+  // If token is expired or will expire in next 5 minutes, refresh it
+  if (isTokenExpired(auth.idToken, 300)) {
+    if (auth.refreshToken) {
+      logStatus('Token expired or expiring soon, refreshing...');
+      return await refreshIdToken();
+    }
+    return null;
+  }
+
+  return auth.idToken;
+}
+
 // Browser-based login - uses device code flow with public URL
 async function startLoginFlow(openBrowser = true) {
   // Convert WebSocket URL to HTTP for API calls
@@ -3189,7 +3219,27 @@ function startClaudeAndTerminal() {
   }
 }
 
-function main() {
+async function main() {
+  // Proactively refresh token if expired before connecting
+  if (bridgeUrl && authToken) {
+    const validToken = await ensureValidToken();
+    if (validToken) {
+      authToken = validToken;
+    } else if (!validToken && getStoredAuth()?.refreshToken) {
+      // Had refresh token but refresh failed - show error
+      log('', colors.red);
+      log('╔════════════════════════════════════════════╗', colors.red);
+      log('║  Token refresh failed                      ║', colors.red);
+      log('║                                            ║', colors.red);
+      log('║  Please re-login:                          ║', colors.red);
+      log('║    vibe login                              ║', colors.red);
+      log('║                                            ║', colors.red);
+      log('╚════════════════════════════════════════════╝', colors.red);
+      log('', colors.red);
+      process.exit(1);
+    }
+  }
+
   console.log('');
   log('🎵 vibe-cli', colors.bright + colors.magenta);
   log('══════════════════════════════════════', colors.dim);
