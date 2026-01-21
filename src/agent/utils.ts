@@ -70,11 +70,13 @@ ${colors.bold}Usage:${colors.reset}
   vibe-agent                Start agent daemon
   vibe-agent login          Sign in (one-time)
   vibe-agent logout         Sign out and clear credentials
+  vibe-agent whoami         Show logged-in user info
   vibe-agent status         Show agent status
 
 ${colors.bold}Commands:${colors.reset}
   login             Sign in via device code flow
   logout            Sign out and clear saved credentials
+  whoami            Show logged-in user info
   status            Show current status and exit
   help              Show this help
 

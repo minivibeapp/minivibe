@@ -21,6 +21,7 @@ export interface AgentOptions {
   logout: boolean;
   name: string | null;
   status: boolean;
+  whoami: boolean;
   help: boolean;
   e2e: boolean;
 }

@@ -12,7 +12,7 @@ import {
   AGENT_START_TIME_FILE,
   AGENT_PORT_FILE,
 } from '../utils/config';
-import { getStoredAuth, storeAuth, clearAuth } from '../auth';
+import { getStoredAuth, storeAuth, clearAuth, getUserInfo } from '../auth';
 import { agentState } from './state';
 import { connect } from './bridge';
 import { startLocalServer, stopLocalServer } from './local-server';
@@ -30,6 +30,7 @@ function parseArgs(): AgentOptions {
     login: '--login',
     logout: '--logout',
     status: '--status',
+    whoami: '--whoami',
     help: '--help',
   };
 
@@ -45,6 +46,7 @@ function parseArgs(): AgentOptions {
     logout: false,
     name: null,
     status: false,
+    whoami: false,
     help: false,
     e2e: false,
   };
@@ -69,6 +71,9 @@ function parseArgs(): AgentOptions {
         break;
       case '--status':
         options.status = true;
+        break;
+      case '--whoami':
+        options.whoami = true;
         break;
       case '--help':
       case '-h':
@@ -389,6 +394,19 @@ async function main(): Promise<void> {
     } else {
       log('Not logged in', colors.yellow);
     }
+    process.exit(0);
+  }
+
+  // Whoami flow
+  if (options.whoami) {
+    const user = getUserInfo();
+    if (!user) {
+      console.log('Not logged in. Run: vibe-agent login');
+      process.exit(1);
+    }
+    console.log(`${colors.green}Logged in as:${colors.reset}`);
+    if (user.name) console.log(`  Name:  ${user.name}`);
+    if (user.email) console.log(`  Email: ${user.email}`);
     process.exit(0);
   }
 
