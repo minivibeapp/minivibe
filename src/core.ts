@@ -298,7 +298,10 @@ export function startClaude(ctx: AppContext): void {
 
   const stdio = ctx.claudeProcess.stdio as (NodeJS.ReadableStream | null)[];
   stdio[4]?.on('data', (data: Buffer) => {
-    sendToBridge(ctx, { type: 'terminal_output', sessionId: ctx.effectiveSessionId, data: data.toString('base64') });
+    // Only send terminal_output in agent mode
+    if (ctx.options.agentUrl) {
+      sendToBridge(ctx, { type: 'terminal_output', sessionId: ctx.effectiveSessionId, data: data.toString('base64') });
+    }
   });
 
   let promptBuf = '';
