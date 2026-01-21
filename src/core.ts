@@ -149,7 +149,7 @@ function handleBridgeMessage(ctx: AppContext, msg: Record<string, unknown>): voi
       });
       break;
 
-    case 'user_message':
+    case 'send_message':
       handleUserMessage(ctx, msg);
       break;
 
@@ -165,9 +165,38 @@ function handleBridgeMessage(ctx: AppContext, msg: Record<string, unknown>): voi
       }
       break;
 
-    case 'permission_response':
-      ctx.callbacks.sendToClaude(msg.approved ? 'y' : 'n', 'permission');
-      ctx.pendingPermission = null;
+    case 'approve_permission':
+    case 'approve_permission_always':
+      // Send '1' for Yes, '2' for Yes don't ask again
+      if (ctx.pendingPermission) {
+        const option = msg.type === 'approve_permission_always' ? '2' : '1';
+        ctx.callbacks.sendToClaude(option, 'permission');
+        ctx.pendingPermission = null;
+      }
+      break;
+
+    case 'deny_permission':
+      // Send Escape to cancel permission prompt
+      if (ctx.pendingPermission) {
+        ctx.claudeProcess?.stdin?.write('\x1b');
+        ctx.pendingPermission = null;
+      }
+      break;
+
+    case 'terminal_input':
+      // Raw terminal input from attached client
+      if (msg.data && ctx.claudeProcess?.stdin?.writable) {
+        ctx.claudeProcess.stdin.write(msg.data as string);
+      }
+      break;
+
+    case 'session_stop':
+      // Agent is stopping this session
+      log('Session stopped by agent', colors.yellow);
+      ctx.isShuttingDown = true;
+      if (ctx.claudeProcess && !ctx.claudeProcess.killed) {
+        ctx.claudeProcess.kill('SIGTERM');
+      }
       break;
   }
 }
