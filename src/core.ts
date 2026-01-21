@@ -537,4 +537,11 @@ export function cleanup(ctx: AppContext): void {
   if (ctx.sessionFileWatcher) ctx.sessionFileWatcher();
   if (ctx.bridgeSocket) ctx.bridgeSocket.close();
   if (ctx.claudeProcess && !ctx.claudeProcess.killed) ctx.claudeProcess.kill('SIGTERM');
+
+  // Restore terminal state
+  if (process.stdin.isTTY) {
+    process.stdin.setRawMode(false);
+  }
+  // Show cursor (in case it was hidden)
+  process.stdout.write('\x1b[?25h');
 }
