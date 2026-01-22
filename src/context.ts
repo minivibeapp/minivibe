@@ -117,6 +117,9 @@ export interface AppContext {
   // Input handling
   inputBuffer: string;
 
+  // Signal handlers (for cleanup)
+  sigwinchHandler: (() => void) | null;
+
   // Callbacks (set by CLI)
   callbacks: AppCallbacks;
 }
@@ -238,6 +241,9 @@ export function createAppContext(
 
     // Input handling
     inputBuffer: '',
+
+    // Signal handlers
+    sigwinchHandler: null,
 
     // Callbacks (will be set by CLI)
     callbacks: {

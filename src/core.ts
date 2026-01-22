@@ -400,6 +400,18 @@ export function startClaude(ctx: AppContext): void {
     process.exit(1);
   });
 
+  // Forward SIGWINCH (window resize) to child process so PTY can update
+  if (process.platform !== 'win32') {
+    const forwardSigwinch = () => {
+      if (ctx.claudeProcess && !ctx.claudeProcess.killed) {
+        ctx.claudeProcess.kill('SIGWINCH');
+      }
+    };
+    process.on('SIGWINCH', forwardSigwinch);
+    // Store handler for cleanup
+    ctx.sigwinchHandler = forwardSigwinch;
+  }
+
   startSessionWatcher(ctx);
 }
 
@@ -712,6 +724,10 @@ export function cleanup(ctx: AppContext): void {
   if (ctx.heartbeatTimer) clearInterval(ctx.heartbeatTimer);
   if (ctx.reconnectTimer) clearTimeout(ctx.reconnectTimer);
   if (ctx.sessionFileWatcher) ctx.sessionFileWatcher();
+  if (ctx.sigwinchHandler) {
+    process.off('SIGWINCH', ctx.sigwinchHandler);
+    ctx.sigwinchHandler = null;
+  }
   if (ctx.bridgeSocket) ctx.bridgeSocket.close();
   if (ctx.claudeProcess && !ctx.claudeProcess.killed) ctx.claudeProcess.kill('SIGTERM');
   restoreTerminal();
