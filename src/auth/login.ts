@@ -188,6 +188,8 @@ export async function startLoginFlow(openBrowserWindow = true): Promise<void> {
     }));
     process.exit(1);
   } catch (err) {
+    // Stop spinner if still running (safe to call multiple times)
+    codeSpinner.stop();
     const message = err instanceof Error ? err.message : 'Unknown error';
     console.log('');
     console.log(formatError({

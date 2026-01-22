@@ -13,11 +13,9 @@ import { colors } from './utils/colors';
 import {
   ui,
   formatError,
-  ErrorSuggestions,
   setJsonOutputMode,
   isJsonOutputMode,
   output,
-  createSpinner,
 } from './utils/terminal';
 import { clearAuth, ensureValidToken, startLoginFlow, startHeadlessLogin, getUserInfo, getStoredAuth } from './auth';
 import { showWelcomeMessage, showClaudeNotFoundMessage, showHelp } from './commands/help';
@@ -196,7 +194,7 @@ async function main(): Promise<void> {
   ctx.callbacks.logStderr = (msg, color = '') => process.stderr.write(`${color}${msg}${colors.reset}\n`);
   ctx.callbacks.logStatus = (msg) => {
     if (options.verboseMode) {
-      const ts = new Date().toISOString().substr(11, 8);
+      const ts = new Date().toISOString().slice(11, 19);
       process.stderr.write(`${colors.dim}[vibe ${ts}] ${msg}${colors.reset}\n`);
     }
   };
