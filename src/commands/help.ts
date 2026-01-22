@@ -68,7 +68,7 @@ export function showHelp(): void {
   console.log(`  ${ui.dim('--e2e')}                       Enable end-to-end encryption`);
   console.log(`  ${ui.dim('--json')}                      Output in JSON format`);
   console.log(`  ${ui.dim('--verbose, -v')}               Enable verbose logging`);
-  console.log(`  ${ui.dim('--skip-permissions')}          Skip permission prompts ${ui.error('(dangerous)')}`);
+  console.log(`  ${ui.dim('--dangerously-skip-permissions')}  Skip all permission prompts`);
   console.log(`  ${ui.dim('--help, -h')}                  Show this help`);
   console.log('');
 
