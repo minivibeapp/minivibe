@@ -23,6 +23,15 @@ output_buffer = ""
 PROMPT_FD = 3  # File descriptor for permission prompt output
 MIRROR_FD = 4  # File descriptor for mirroring terminal output (optional)
 
+# Check if verbose mode is enabled via environment variable
+VERBOSE = os.environ.get('VIBE_VERBOSE', '').lower() in ('1', 'true', 'yes')
+
+def debug_log(msg):
+    """Write debug message to stderr only if verbose mode is enabled."""
+    if VERBOSE:
+        sys.stderr.write(msg)
+        sys.stderr.flush()
+
 def has_mirror_fd():
     """Check if FD 4 is available for output mirroring."""
     try:
@@ -53,8 +62,7 @@ def detect_permission_prompt(text):
     has_options = bool(re.search(r'\d+\.\s+Yes', clean))
 
     if has_proceed and has_options:
-        sys.stderr.write(f"[PTY-DEBUG] Potential prompt detected, parsing...\n")
-        sys.stderr.flush()
+        debug_log(f"[PTY-DEBUG] Potential prompt detected, parsing...\n")
 
     # Look for the permission prompt pattern
     # Claude shows: "Bash command" or "Edit" header, then "Do you want to proceed?" with numbered options
@@ -70,18 +78,13 @@ def detect_permission_prompt(text):
 
         # Detect tool name from header line (e.g., "Bash command", "Edit", "Read")
         # Claude formats it as colored text, but after stripping ANSI it's just the tool name
+        # Use re.search (not match) to find tool name anywhere in the line (handles box chars)
         if not tool_name:
-            # Look for common tool patterns
-            tool_match = re.match(r'^(Bash|Edit|Read|Write|Glob|Grep|Task|WebFetch|WebSearch)\s*(command|file)?', line, re.IGNORECASE)
+            # Look for common tool patterns - search anywhere in the line
+            tool_match = re.search(r'\b(Bash|Edit|Read|Write|Glob|Grep|Task|WebFetch|WebSearch|NotebookEdit)\s*(command|file)?\b', line, re.IGNORECASE)
             if tool_match:
-                tool_name = tool_match.group(1)
-                sys.stderr.write(f"[PTY-DEBUG] Found tool_name: {tool_name}\n")
-                sys.stderr.flush()
-            # Also check for standalone tool names
-            elif line in ['Bash', 'Edit', 'Read', 'Write', 'Glob', 'Grep', 'Task', 'WebFetch', 'WebSearch', 'NotebookEdit']:
-                tool_name = line
-                sys.stderr.write(f"[PTY-DEBUG] Found standalone tool_name: {tool_name}\n")
-                sys.stderr.flush()
+                tool_name = tool_match.group(1).capitalize()
+                debug_log(f"[PTY-DEBUG] Found tool_name: {tool_name}\n")
 
         # Capture the command/file being operated on (line after tool name, before question)
         if tool_name and not tool_input and not question:
@@ -109,23 +112,31 @@ def detect_permission_prompt(text):
             })
 
     # If tool_name not found, try to infer from options text
+    # Priority: Bash > Edit > Read (since "access" is ambiguous and often used in Bash prompts)
     if not tool_name and options:
         options_text = ' '.join(opt.get('label', '') for opt in options).lower()
-        if 'access' in options_text or 'read' in options_text:
-            tool_name = 'Read'
-            sys.stderr.write(f"[PTY-DEBUG] Inferred tool_name from options: Read\n")
-        elif 'execute' in options_text or 'run' in options_text or 'command' in options_text:
+        # Check for Bash indicators first (has priority)
+        if 'execute' in options_text or 'run' in options_text or 'command' in options_text:
             tool_name = 'Bash'
-            sys.stderr.write(f"[PTY-DEBUG] Inferred tool_name from options: Bash\n")
-        elif 'edit' in options_text or 'modify' in options_text or 'write' in options_text:
+            debug_log(f"[PTY-DEBUG] Inferred tool_name from options: Bash\n")
+        elif 'edit' in options_text or 'modify' in options_text:
             tool_name = 'Edit'
-            sys.stderr.write(f"[PTY-DEBUG] Inferred tool_name from options: Edit\n")
-        sys.stderr.flush()
+            debug_log(f"[PTY-DEBUG] Inferred tool_name from options: Edit\n")
+        elif 'read file' in options_text:
+            # Only infer Read for explicit "read file" mentions
+            tool_name = 'Read'
+            debug_log(f"[PTY-DEBUG] Inferred tool_name from options: Read\n")
+        elif 'write' in options_text:
+            tool_name = 'Write'
+            debug_log(f"[PTY-DEBUG] Inferred tool_name from options: Write\n")
+        # "access" alone is too generic - could be Bash accessing files, default to Bash
+        elif 'access' in options_text:
+            tool_name = 'Bash'
+            debug_log(f"[PTY-DEBUG] Inferred tool_name from 'access': Bash (default)\n")
 
     # Debug output
     if has_proceed and has_options:
-        sys.stderr.write(f"[PTY-DEBUG] Parsed: tool_name={tool_name}, question={question}, options={len(options)}\n")
-        sys.stderr.flush()
+        debug_log(f"[PTY-DEBUG] Parsed: tool_name={tool_name}, question={question}, options={len(options)}\n")
 
     # Only return if we found valid options AND a tool name
     if len(options) >= 2 and tool_name:
@@ -139,8 +150,7 @@ def detect_permission_prompt(text):
         }
     elif len(options) >= 2 and not tool_name:
         # Last resort: use generic "Tool" as fallback
-        sys.stderr.write(f"[PTY-DEBUG] Using fallback tool_name='Tool'\n")
-        sys.stderr.flush()
+        debug_log(f"[PTY-DEBUG] Using fallback tool_name='Tool'\n")
         return {
             'type': 'permission_prompt',
             'prompt_id': str(uuid.uuid4()),
@@ -159,13 +169,11 @@ def send_prompt_to_fd(prompt_data):
         os.fstat(PROMPT_FD)
         json_line = json.dumps(prompt_data) + '\n'
         os.write(PROMPT_FD, json_line.encode('utf-8'))
-        # Debug: also write to stderr so we can see it
-        sys.stderr.write(f"[PTY] Detected prompt: tool={prompt_data.get('tool_name', 'unknown')}, question={prompt_data.get('question', 'unknown')}, options={len(prompt_data.get('options', []))}\n")
-        sys.stderr.flush()
+        # Debug: also write to stderr in verbose mode
+        debug_log(f"[PTY] Detected prompt: tool={prompt_data.get('tool_name', 'unknown')}, question={prompt_data.get('question', 'unknown')}, options={len(prompt_data.get('options', []))}\n")
     except OSError as e:
-        # FD 3 not available, log to stderr
-        sys.stderr.write(f"[PTY] FD 3 not available: {e}\n")
-        sys.stderr.flush()
+        # FD 3 not available, log to stderr only in verbose mode
+        debug_log(f"[PTY] FD 3 not available: {e}\n")
 
 def main():
     # Get command to run
@@ -330,8 +338,7 @@ def main():
                             # Clear buffer after sending prompt
                             output_buffer = ""
                     except Exception as e:
-                        sys.stderr.write(f"[PTY] Error in prompt detection: {e}\n")
-                        sys.stderr.flush()
+                        debug_log(f"[PTY] Error in prompt detection: {e}\n")
                 except OSError:
                     break
 
