@@ -10,6 +10,15 @@ import { v4 as uuidv4 } from 'uuid';
 
 import { DEFAULT_BRIDGE_URL, DEFAULT_AGENT_URL, AGENT_PORT_FILE } from './utils/config';
 import { colors } from './utils/colors';
+import {
+  ui,
+  formatError,
+  ErrorSuggestions,
+  setJsonOutputMode,
+  isJsonOutputMode,
+  output,
+  createSpinner,
+} from './utils/terminal';
 import { clearAuth, ensureValidToken, startLoginFlow, startHeadlessLogin, getUserInfo, getStoredAuth } from './auth';
 import { showWelcomeMessage, showClaudeNotFoundMessage, showHelp } from './commands/help';
 import { checkClaudeInstalled } from './claude/process';
@@ -64,6 +73,7 @@ function parseArgs(argv: string[]): { options: CliOptions; subcommand: Subcomman
     else if (a === '--help' || a === '-h') options.helpMode = true;
     else if (a === '--headless') options.headlessMode = true;
     else if (a === '--verbose' || a === '-v') options.verboseMode = true;
+    else if (a === '--json') options.jsonMode = true;
     else if (a === '--e2e') options.e2eEnabled = true;
     else if (a === '--node-pty') options.useNodePty = true;
     else if (a === '--dangerously-skip-permissions') options.skipPermissions = true;
@@ -104,43 +114,75 @@ ${'═'.repeat(38)}${colors.reset}
 async function main(): Promise<void> {
   const { options, subcommand } = parseArgs(process.argv.slice(2));
 
+  // Enable JSON output mode if requested
+  if (options.jsonMode) {
+    setJsonOutputMode(true);
+  }
+
   // Simple modes
   if (options.helpMode) { showHelp(); process.exit(0); }
   if (options.loginMode) { await (options.headlessMode ? startHeadlessLogin() : startLoginFlow()); return; }
   if (options.logoutMode) {
     if (getStoredAuth()) {
       clearAuth();
-      console.log(`${colors.green}Logged out successfully${colors.reset}`);
+      output({ success: true, message: 'Logged out successfully' }, () => {
+        console.log(ui.success('Logged out successfully'));
+      });
     } else {
-      console.log(`${colors.yellow}Not logged in${colors.reset}`);
+      output({ success: false, message: 'Not logged in' }, () => {
+        console.log(ui.warn('Not logged in'));
+      });
     }
     process.exit(0);
   }
   if (options.whoamiMode) {
     const user = getUserInfo();
     if (!user) {
-      console.log('Not logged in. Run: vibe login');
+      output({ success: false, error: 'Not logged in' }, () => {
+        console.log(formatError({
+          message: 'Not logged in',
+          suggestions: ['Run: vibe login'],
+        }));
+      });
       process.exit(1);
     }
-    console.log(`${colors.green}Logged in as:${colors.reset}`);
-    if (user.name) console.log(`  Name:  ${user.name}`);
-    if (user.email) console.log(`  Email: ${user.email}`);
+    output({ success: true, user }, () => {
+      console.log(ui.success('Logged in as:'));
+      if (user.name) console.log(`  Name:  ${user.name}`);
+      if (user.email) console.log(`  Email: ${user.email}`);
+    });
     process.exit(0);
   }
 
   // TODO: Handle subcommands (file upload, session list, etc.)
   if (subcommand) {
-    console.log(`Subcommand ${subcommand.group} ${subcommand.action} not yet implemented in new CLI`);
+    output({ success: false, error: 'Not implemented' }, () => {
+      console.log(ui.warn(`Subcommand ${subcommand.group} ${subcommand.action} not yet implemented`));
+    });
     process.exit(1);
   }
 
   // Check Claude installed
-  if (!checkClaudeInstalled()) { showClaudeNotFoundMessage(); process.exit(1); }
+  if (!checkClaudeInstalled()) {
+    if (isJsonOutputMode()) {
+      console.log(JSON.stringify({ success: false, error: 'Claude Code not found' }));
+    } else {
+      showClaudeNotFoundMessage();
+    }
+    process.exit(1);
+  }
 
   // Check auth
   if (!options.agentUrl) {
     const token = await ensureValidToken();
-    if (!token) { showWelcomeMessage(); process.exit(1); }
+    if (!token) {
+      if (isJsonOutputMode()) {
+        console.log(JSON.stringify({ success: false, error: 'Not authenticated' }));
+      } else {
+        showWelcomeMessage();
+      }
+      process.exit(1);
+    }
   }
 
   // Create context
@@ -169,4 +211,18 @@ async function main(): Promise<void> {
   setupTerminalInput(ctx);
 }
 
-main().catch((err) => { console.error('Error:', err.message); process.exit(1); });
+main().catch((err) => {
+  if (isJsonOutputMode()) {
+    console.log(JSON.stringify({
+      success: false,
+      error: err instanceof Error ? err.message : 'Unknown error',
+    }));
+  } else {
+    console.log(formatError({
+      message: err instanceof Error ? err.message : 'Unknown error',
+      code: 'UNEXPECTED_ERROR',
+      suggestions: ['Try running with --verbose for more details'],
+    }));
+  }
+  process.exit(1);
+});

@@ -2,95 +2,104 @@
  * Help and welcome messages
  */
 
+import { ui, box, formatError, ErrorSuggestions } from '../utils/terminal';
+
 /**
  * Show welcome message for first-time users (no auth)
  */
 export function showWelcomeMessage(): void {
-  console.log(`
-Welcome to MiniVibe!
-
-MiniVibe lets you control Claude Code from your iPhone.
-
-To get started:
-  1. Download MiniVibe from the App Store
-  2. Run: vibe login
-
-For help: vibe help
-`);
+  console.log('');
+  console.log(ui.brand('Welcome to MiniVibe!'));
+  console.log('');
+  console.log('MiniVibe lets you control Claude Code from your iPhone.');
+  console.log('');
+  console.log(ui.highlight('To get started:'));
+  console.log('  1. Download MiniVibe from the App Store');
+  console.log(`  2. Run: ${ui.accent('vibe login')}`);
+  console.log('');
+  console.log(ui.dim(`For help: vibe help`));
+  console.log('');
 }
 
 /**
  * Show error when Claude Code is not installed
  */
 export function showClaudeNotFoundMessage(): void {
-  console.log(`
-Claude Code not found
-
-MiniVibe requires Claude Code CLI to be installed.
-
-Install Claude Code:
-  https://claude.ai/download
-
-After installing, run:
-  vibe login
-`);
+  console.log('');
+  console.log(formatError({
+    message: 'Claude Code not found',
+    code: 'CLAUDE_NOT_INSTALLED',
+    details: 'MiniVibe requires Claude Code CLI to be installed.',
+    suggestions: ErrorSuggestions.CLAUDE_NOT_FOUND,
+  }));
+  console.log('');
 }
 
 /**
  * Show CLI help text
  */
 export function showHelp(): void {
-  console.log(`
-MiniVibe - Control Claude Code from your iPhone
+  console.log('');
+  console.log(ui.brand('MiniVibe') + ui.dim(' - Control Claude Code from your iPhone'));
+  console.log('');
 
-Usage:
-  vibe                         Start interactive session
-  vibe "your prompt here"      Start session with prompt
-  vibe --resume <id>           Resume existing session
+  // Usage section
+  console.log(ui.highlight('Usage:'));
+  console.log(`  ${ui.accent('vibe')}                         Start interactive session`);
+  console.log(`  ${ui.accent('vibe "prompt"')}                Start session with prompt`);
+  console.log(`  ${ui.accent('vibe --resume <id>')}          Resume existing session`);
+  console.log('');
 
-Authentication:
-  vibe login                   Login with your MiniVibe account
-  vibe login --headless        Login without opening browser
-  vibe whoami                  Show logged-in user info
-  vibe logout                  Log out and clear credentials
+  // Authentication section
+  console.log(ui.highlight('Authentication:'));
+  console.log(`  ${ui.accent('vibe login')}                   Login with your MiniVibe account`);
+  console.log(`  ${ui.accent('vibe login --headless')}        Login without opening browser`);
+  console.log(`  ${ui.accent('vibe whoami')}                  Show logged-in user info`);
+  console.log(`  ${ui.accent('vibe logout')}                  Log out and clear credentials`);
+  console.log('');
 
-Options:
-  --resume, -r <id>           Resume a session by ID
-  --name <name>               Name this session
-  --bridge <url>              Custom bridge server URL
-  --agent                     Connect via local vibe-agent
-  --node-pty                  Use Node.js PTY wrapper
-  --e2e                       Enable end-to-end encryption
-  --skip-permissions          Skip permission prompts (dangerous)
-  --headless                  Headless mode (no browser for login)
-  --debug                     Enable debug logging
-  --help, -h                  Show this help
+  // Options section
+  console.log(ui.highlight('Options:'));
+  console.log(`  ${ui.dim('--resume, -r <id>')}           Resume a session by ID`);
+  console.log(`  ${ui.dim('--name <name>')}               Name this session`);
+  console.log(`  ${ui.dim('--bridge <url>')}              Custom bridge server URL`);
+  console.log(`  ${ui.dim('--agent')}                     Connect via local vibe-agent`);
+  console.log(`  ${ui.dim('--node-pty')}                  Use Node.js PTY wrapper`);
+  console.log(`  ${ui.dim('--e2e')}                       Enable end-to-end encryption`);
+  console.log(`  ${ui.dim('--json')}                      Output in JSON format`);
+  console.log(`  ${ui.dim('--verbose, -v')}               Enable verbose logging`);
+  console.log(`  ${ui.dim('--skip-permissions')}          Skip permission prompts ${ui.error('(dangerous)')}`);
+  console.log(`  ${ui.dim('--help, -h')}                  Show this help`);
+  console.log('');
 
-In-session Commands:
-  /whoami                     Show logged-in user
-  /name <name>                Rename current session
-  /info                       Show session details
-  /upload <path>              Upload file to cloud storage
-  /download <id> [-o path]    Download file by ID
-  /files                      List uploaded files
-  /help                       Show available commands
+  // In-session commands
+  console.log(ui.highlight('In-session Commands:'));
+  console.log(`  ${ui.accent('/whoami')}                     Show logged-in user`);
+  console.log(`  ${ui.accent('/name <name>')}                Rename current session`);
+  console.log(`  ${ui.accent('/info')}                       Show session details`);
+  console.log(`  ${ui.accent('/upload <path>')}              Upload file to cloud storage`);
+  console.log(`  ${ui.accent('/download <id>')}              Download file by ID`);
+  console.log(`  ${ui.accent('/files')}                      List uploaded files`);
+  console.log(`  ${ui.accent('/help')}                       Show available commands`);
+  console.log('');
 
-Examples:
-  vibe                        Start new interactive session
-  vibe "help me fix this bug" Start session with initial prompt
-  vibe --resume abc123        Resume session abc123
-  vibe --name "my-project"    Start named session
-  vibe login                  Authenticate with MiniVibe
+  // Examples section
+  console.log(ui.highlight('Examples:'));
+  console.log(`  ${ui.dim('$')} vibe`);
+  console.log(`  ${ui.dim('$')} vibe "help me fix this bug"`);
+  console.log(`  ${ui.dim('$')} vibe --resume abc123`);
+  console.log(`  ${ui.dim('$')} vibe --name "my-project"`);
+  console.log('');
 
-For more info: https://github.com/minivibeapp/minivibe
-`);
+  console.log(ui.dim('For more info: https://github.com/minivibeapp/minivibe'));
+  console.log('');
 }
 
 /**
  * Show version information
  */
 export function showVersion(version: string): void {
-  console.log(`minivibe v${version}`);
+  console.log(`${ui.brand('minivibe')} ${ui.dim(`v${version}`)}`);
 }
 
 /**
@@ -102,15 +111,13 @@ export function showSessionBanner(
   bridgeUrl: string,
   e2eEnabled: boolean
 ): void {
-  console.log(`
-╔══════════════════════════════════════════╗
-║  MiniVibe - Control Claude from iPhone   ║
-╚══════════════════════════════════════════╝
-
-Session: ${sessionId.slice(0, 8)}...${sessionName ? ` (${sessionName})` : ''}
-Bridge:  ${bridgeUrl}
-E2E:     ${e2eEnabled ? 'enabled' : 'disabled'}
-
-Type /help for in-session commands.
-`);
+  console.log('');
+  console.log(box('MiniVibe - Control Claude from iPhone', { title: 'Session', padding: 0 }));
+  console.log('');
+  console.log(`  ${ui.dim('Session:')}  ${sessionId.slice(0, 8)}...${sessionName ? ` ${ui.accent(`(${sessionName})`)}` : ''}`);
+  console.log(`  ${ui.dim('Bridge:')}   ${bridgeUrl}`);
+  console.log(`  ${ui.dim('E2E:')}      ${e2eEnabled ? ui.success('enabled') : ui.dim('disabled')}`);
+  console.log('');
+  console.log(ui.dim('Type /help for in-session commands.'));
+  console.log('');
 }

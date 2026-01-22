@@ -1,5 +1,6 @@
 import { exec } from 'child_process';
 import { DEFAULT_BRIDGE_URL, WEB_APP_URL, AUTH_FILE } from '../utils/config';
+import { createSpinner, ui, formatError, ErrorSuggestions, box } from '../utils/terminal';
 import { storeAuth } from './storage';
 
 /**
@@ -48,44 +49,51 @@ function openBrowser(url: string): void {
 export async function startLoginFlow(openBrowserWindow = true): Promise<void> {
   const bridgeHttpUrl = wsToHttpUrl(DEFAULT_BRIDGE_URL);
 
-  console.log(`
-🔐 Login
-══════════════════════════════════════
-`);
+  console.log('');
+  console.log(ui.brand('MiniVibe Login'));
+  console.log(ui.dim('═'.repeat(38)));
+  console.log('');
+
+  // Step 1: Request device code
+  const codeSpinner = createSpinner('Requesting device code...');
 
   try {
-    // Request a device code from the bridge server
-    console.log('Requesting device code...');
     const codeRes = await fetch(`${bridgeHttpUrl}/device/code`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
     });
 
     if (!codeRes.ok) {
-      console.error(`Failed to get device code: ${codeRes.status}`);
+      codeSpinner.fail('Failed to get device code');
+      console.log('');
+      console.log(formatError({
+        message: `Server returned ${codeRes.status}`,
+        code: 'AUTH_CODE_FAILED',
+        suggestions: ErrorSuggestions.CONNECTION_FAILED,
+      }));
       process.exit(1);
     }
 
     const { deviceId, code, expiresIn } = (await codeRes.json()) as DeviceCodeResponse;
-    const pairUrl = `${WEB_APP_URL}/pair`;
+    codeSpinner.success('Device code received');
 
-    console.log(`   Visit:  ${pairUrl}`);
-    console.log(`   Code:   ${code}`);
+    // Display the code in a box
+    const pairUrl = `${WEB_APP_URL}/pair`;
     console.log('');
-    console.log(`   Code expires in ${Math.floor(expiresIn / 60)} minutes.`);
+    console.log(box(`Visit:  ${pairUrl}\nCode:   ${ui.highlight(code)}`, { title: 'Pair Device', padding: 1 }));
+    console.log('');
+    console.log(ui.dim(`Code expires in ${Math.floor(expiresIn / 60)} minutes`));
 
     // Open browser if requested
     if (openBrowserWindow) {
-      console.log('   Opening browser...');
       openBrowser(pairUrl);
+      console.log(ui.dim('Browser opened automatically'));
     }
-
-    console.log('   Waiting for authentication...');
-    console.log('');
-    console.log('   Press Ctrl+C to cancel.');
     console.log('');
 
-    // Poll for token
+    // Step 2: Poll for authentication
+    const authSpinner = createSpinner('Waiting for authentication...');
+
     const pollInterval = 3000; // 3 seconds
     const maxAttempts = Math.ceil((expiresIn * 1000) / pollInterval);
     let attempts = 0;
@@ -104,10 +112,16 @@ export async function startLoginFlow(openBrowserWindow = true): Promise<void> {
         if (!contentType.includes('application/json')) {
           consecutiveErrors++;
           if (consecutiveErrors >= maxConsecutiveErrors) {
-            console.error(`\nServer error: Invalid response format`);
+            authSpinner.fail('Server error');
+            console.log('');
+            console.log(formatError({
+              message: 'Invalid response format from server',
+              code: 'AUTH_INVALID_RESPONSE',
+              suggestions: ErrorSuggestions.CONNECTION_FAILED,
+            }));
             process.exit(1);
           }
-          process.stdout.write('!');
+          authSpinner.update(`Waiting for authentication... (retry ${consecutiveErrors})`);
           continue;
         }
 
@@ -115,42 +129,72 @@ export async function startLoginFlow(openBrowserWindow = true): Promise<void> {
         consecutiveErrors = 0; // Reset on successful response
 
         if (pollData.status === 'complete' && pollData.token) {
-          console.log(''); // New line after dots
+          authSpinner.success('Authentication complete');
           storeAuth(pollData.token, pollData.refreshToken || null);
-          console.log(`✅ Logged in as ${pollData.email}`);
-          console.log(`   Auth saved to ${AUTH_FILE}`);
+          console.log('');
+          console.log(ui.success(`Logged in as ${pollData.email || 'user'}`));
+          console.log(ui.dim(`Auth saved to ${AUTH_FILE}`));
           if (pollData.refreshToken) {
-            console.log(`   Token auto-refresh enabled`);
+            console.log(ui.dim('Token auto-refresh enabled'));
           }
+          console.log('');
           process.exit(0);
         } else if (pollRes.status === 404 || pollData.error === 'Device not found or expired') {
-          console.log('\n\nCode expired. Please try again.');
+          authSpinner.fail('Code expired');
+          console.log('');
+          console.log(formatError({
+            message: 'The pairing code has expired',
+            code: 'AUTH_CODE_EXPIRED',
+            suggestions: ['Run: vibe login to get a new code'],
+          }));
           process.exit(1);
         } else if (pollData.error) {
-          console.error(`\nError: ${pollData.error}`);
+          authSpinner.fail('Authentication failed');
+          console.log('');
+          console.log(formatError({
+            message: pollData.error,
+            code: 'AUTH_ERROR',
+            suggestions: ErrorSuggestions.AUTH_FAILED,
+          }));
           process.exit(1);
         }
 
-        // Still pending, continue polling
-        process.stdout.write('.');
+        // Update spinner with remaining time
+        const remainingMins = Math.ceil((maxAttempts - attempts) * pollInterval / 60000);
+        authSpinner.update(`Waiting for authentication... (${remainingMins}m remaining)`);
       } catch (err) {
         consecutiveErrors++;
         if (consecutiveErrors >= maxConsecutiveErrors) {
           const message = err instanceof Error ? err.message : 'Unknown error';
-          console.error(`\nNetwork error: ${message}`);
-          console.error('Please check your internet connection and try again.');
+          authSpinner.fail('Network error');
+          console.log('');
+          console.log(formatError({
+            message: message,
+            code: 'AUTH_NETWORK_ERROR',
+            suggestions: ErrorSuggestions.CONNECTION_FAILED,
+          }));
           process.exit(1);
         }
-        // Temporary network error - show warning but continue
-        process.stdout.write('!');
+        authSpinner.update(`Waiting for authentication... (retrying connection)`);
       }
     }
 
-    console.log('\n\nLogin timed out. Please try again.');
+    authSpinner.fail('Login timed out');
+    console.log('');
+    console.log(formatError({
+      message: 'Login request timed out',
+      code: 'AUTH_TIMEOUT',
+      suggestions: ['Run: vibe login to try again'],
+    }));
     process.exit(1);
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error';
-    console.error(`Failed to start login: ${message}`);
+    console.log('');
+    console.log(formatError({
+      message: `Failed to start login: ${message}`,
+      code: 'AUTH_INIT_FAILED',
+      suggestions: ErrorSuggestions.CONNECTION_FAILED,
+    }));
     process.exit(1);
   }
 }

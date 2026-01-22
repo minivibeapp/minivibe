@@ -35,6 +35,7 @@ export interface CliOptions {
   remoteAttachMode: boolean;
   e2eEnabled: boolean;
   verboseMode: boolean;
+  jsonMode: boolean;
   loginMode: boolean;
   logoutMode: boolean;
   statusMode: boolean;
@@ -161,6 +162,7 @@ export function createDefaultOptions(): CliOptions {
     remoteAttachMode: false,
     e2eEnabled: false,
     verboseMode: false,
+    jsonMode: false,
     loginMode: false,
     logoutMode: false,
     statusMode: false,
