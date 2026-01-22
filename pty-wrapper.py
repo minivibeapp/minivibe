@@ -117,16 +117,31 @@ def main():
     # Create pseudo-terminal
     master_fd, slave_fd = pty.openpty()
 
-    # Get terminal size from stdout (which is typically inherited from parent terminal)
-    # This works even when stdin is a pipe
-    if stdout_is_tty:
+    # Get terminal size - try multiple methods:
+    # 1. Environment variables from parent (most reliable when spawned from Node.js)
+    # 2. stdout if it's a TTY
+    # 3. Default to 80x24
+    cols = 80
+    rows = 24
+
+    # Method 1: Check env vars from vibe CLI
+    env_cols = os.environ.get('VIBE_COLS')
+    env_rows = os.environ.get('VIBE_ROWS')
+    if env_cols and env_rows:
+        try:
+            cols = int(env_cols)
+            rows = int(env_rows)
+        except ValueError:
+            pass
+
+    # Method 2: Try stdout if it's a TTY
+    elif stdout_is_tty:
         try:
             rows, cols = os.get_terminal_size(sys.stdout.fileno())
-            set_winsize(slave_fd, rows, cols)
         except OSError:
-            set_winsize(slave_fd, 24, 80)
-    else:
-        set_winsize(slave_fd, 24, 80)
+            pass
+
+    set_winsize(slave_fd, rows, cols)
 
     # Fork process
     pid = os.fork()
@@ -157,16 +172,31 @@ def main():
     if stdin_is_tty:
         tty.setraw(sys.stdin.fileno())
 
-    # Handle window resize
+    # Handle window resize from SIGWINCH or special escape sequence
     def handle_sigwinch(signum, frame):
+        # Try env vars first (updated by parent before sending signal)
+        env_cols = os.environ.get('VIBE_COLS')
+        env_rows = os.environ.get('VIBE_ROWS')
+        if env_cols and env_rows:
+            try:
+                new_cols = int(env_cols)
+                new_rows = int(env_rows)
+                set_winsize(master_fd, new_rows, new_cols)
+                return
+            except ValueError:
+                pass
+        # Fall back to stdout detection
         if stdout_is_tty:
             try:
-                rows, cols = os.get_terminal_size(sys.stdout.fileno())
-                set_winsize(master_fd, rows, cols)
+                new_rows, new_cols = os.get_terminal_size(sys.stdout.fileno())
+                set_winsize(master_fd, new_rows, new_cols)
             except OSError:
                 pass
 
     signal.signal(signal.SIGWINCH, handle_sigwinch)
+
+    # Special escape sequence for resize: \x1b]VIBE;RESIZE;cols;rows\x07
+    resize_pattern = re.compile(rb'\x1b\]VIBE;RESIZE;(\d+);(\d+)\x07')
 
     exit_code = 0
     try:
@@ -179,11 +209,21 @@ def main():
                 continue
 
             if sys.stdin.fileno() in readable:
-                # Data from stdin -> send to PTY
+                # Data from stdin -> send to PTY (check for resize escape first)
                 try:
                     data = os.read(sys.stdin.fileno(), 1024)
                     if not data:
                         break
+                    # Check for resize escape sequence: \x1b]VIBE;RESIZE;cols;rows\x07
+                    match = resize_pattern.search(data)
+                    if match:
+                        new_cols = int(match.group(1))
+                        new_rows = int(match.group(2))
+                        set_winsize(master_fd, new_rows, new_cols)
+                        # Remove the escape sequence from data before passing to PTY
+                        data = resize_pattern.sub(b'', data)
+                        if not data:
+                            continue
                     os.write(master_fd, data)
                 except OSError:
                     break

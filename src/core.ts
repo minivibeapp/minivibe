@@ -338,9 +338,19 @@ export function startClaude(ctx: AppContext): void {
     process.exit(1);
   }
 
+  // Pass terminal size via env vars since Python can't detect it when stdin is piped
+  const cols = process.stdout.columns || 80;
+  const rows = process.stdout.rows || 24;
+
   ctx.claudeProcess = spawn(cmd, args, {
     cwd: process.cwd(),
-    env: { ...process.env, TERM: 'xterm-256color', PYTHONUNBUFFERED: '1' },
+    env: {
+      ...process.env,
+      TERM: 'xterm-256color',
+      PYTHONUNBUFFERED: '1',
+      VIBE_COLS: String(cols),
+      VIBE_ROWS: String(rows),
+    },
     stdio: ctx.options.agentUrl ? ['pipe', 'ignore', 'ignore', 'pipe', 'pipe'] : ['pipe', 'inherit', 'inherit', 'pipe', 'pipe'],
   });
   ctx.isRunning = true;
@@ -400,11 +410,15 @@ export function startClaude(ctx: AppContext): void {
     process.exit(1);
   });
 
-  // Forward SIGWINCH (window resize) to child process so PTY can update
+  // Handle SIGWINCH (window resize) by sending new size to PTY wrapper
   if (process.platform !== 'win32') {
     const forwardSigwinch = () => {
-      if (ctx.claudeProcess && !ctx.claudeProcess.killed) {
-        ctx.claudeProcess.kill('SIGWINCH');
+      if (ctx.claudeProcess?.stdin?.writable) {
+        const newCols = process.stdout.columns || 80;
+        const newRows = process.stdout.rows || 24;
+        // Send resize escape sequence: \x1b]VIBE;RESIZE;cols;rows\x07
+        const resizeSeq = `\x1b]VIBE;RESIZE;${newCols};${newRows}\x07`;
+        ctx.claudeProcess.stdin.write(resizeSeq);
       }
     };
     process.on('SIGWINCH', forwardSigwinch);
