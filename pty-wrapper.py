@@ -16,6 +16,7 @@ import struct
 import fcntl
 import re
 import json
+import uuid
 
 # Buffer for detecting permission prompts
 output_buffer = ""
@@ -48,14 +49,36 @@ def detect_permission_prompt(text):
     clean = strip_ansi(text)
 
     # Look for the permission prompt pattern
-    # Claude shows: "Do you want to proceed?" or similar, followed by numbered options
+    # Claude shows: "Bash command" or "Edit" header, then "Do you want to proceed?" with numbered options
     lines = clean.split('\n')
 
     options = []
     question = None
+    tool_name = None
+    tool_input = None
 
     for i, line in enumerate(lines):
         line = line.strip()
+
+        # Detect tool name from header line (e.g., "Bash command", "Edit", "Read")
+        # Claude formats it as colored text, but after stripping ANSI it's just the tool name
+        if not tool_name:
+            # Look for common tool patterns
+            tool_match = re.match(r'^(Bash|Edit|Read|Write|Glob|Grep|Task|WebFetch|WebSearch)\s*(command|file)?', line, re.IGNORECASE)
+            if tool_match:
+                tool_name = tool_match.group(1)
+            # Also check for standalone tool names
+            elif line in ['Bash', 'Edit', 'Read', 'Write', 'Glob', 'Grep', 'Task', 'WebFetch', 'WebSearch', 'NotebookEdit']:
+                tool_name = line
+
+        # Capture the command/file being operated on (line after tool name, before question)
+        if tool_name and not tool_input and not question:
+            # Skip empty lines and the tool name line itself
+            if line and line != tool_name and not line.startswith(tool_name):
+                # This is likely the command or file path
+                if not ('want to' in line.lower() or 'allow' in line.lower() or 'proceed' in line.lower()):
+                    if not re.match(r'^[›\s]*\d+\.', line):  # Not an option line
+                        tool_input = line
 
         # Detect question line
         if 'want to' in line.lower() or 'allow' in line.lower() or 'proceed' in line.lower():
@@ -73,11 +96,14 @@ def detect_permission_prompt(text):
                 'requiresInput': 'type' in opt_label.lower() or 'tell' in opt_label.lower()
             })
 
-    # Only return if we found valid options
-    if len(options) >= 2:
+    # Only return if we found valid options AND a tool name
+    if len(options) >= 2 and tool_name:
         return {
             'type': 'permission_prompt',
+            'prompt_id': str(uuid.uuid4()),
+            'tool_name': tool_name,
             'question': question or 'Permission required',
+            'tool_input': {'command': tool_input} if tool_input else {},
             'options': options
         }
 
@@ -91,11 +117,12 @@ def send_prompt_to_fd(prompt_data):
         json_line = json.dumps(prompt_data) + '\n'
         os.write(PROMPT_FD, json_line.encode('utf-8'))
         # Debug: also write to stderr so we can see it
-        sys.stderr.write(f"[PTY] Detected prompt: {prompt_data.get('question', 'unknown')}, options: {len(prompt_data.get('options', []))}\n")
+        sys.stderr.write(f"[PTY] Detected prompt: tool={prompt_data.get('tool_name', 'unknown')}, question={prompt_data.get('question', 'unknown')}, options={len(prompt_data.get('options', []))}\n")
         sys.stderr.flush()
-    except OSError:
-        # FD 3 not available, skip
-        pass
+    except OSError as e:
+        # FD 3 not available, log to stderr
+        sys.stderr.write(f"[PTY] FD 3 not available: {e}\n")
+        sys.stderr.flush()
 
 def main():
     # Get command to run
