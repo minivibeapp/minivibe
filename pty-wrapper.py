@@ -48,6 +48,14 @@ def detect_permission_prompt(text):
     """
     clean = strip_ansi(text)
 
+    # Debug: check if we have potential permission prompt keywords
+    has_proceed = 'proceed' in clean.lower()
+    has_options = bool(re.search(r'\d+\.\s+Yes', clean))
+
+    if has_proceed and has_options:
+        sys.stderr.write(f"[PTY-DEBUG] Potential prompt detected, parsing...\n")
+        sys.stderr.flush()
+
     # Look for the permission prompt pattern
     # Claude shows: "Bash command" or "Edit" header, then "Do you want to proceed?" with numbered options
     lines = clean.split('\n')
@@ -67,9 +75,13 @@ def detect_permission_prompt(text):
             tool_match = re.match(r'^(Bash|Edit|Read|Write|Glob|Grep|Task|WebFetch|WebSearch)\s*(command|file)?', line, re.IGNORECASE)
             if tool_match:
                 tool_name = tool_match.group(1)
+                sys.stderr.write(f"[PTY-DEBUG] Found tool_name: {tool_name}\n")
+                sys.stderr.flush()
             # Also check for standalone tool names
             elif line in ['Bash', 'Edit', 'Read', 'Write', 'Glob', 'Grep', 'Task', 'WebFetch', 'WebSearch', 'NotebookEdit']:
                 tool_name = line
+                sys.stderr.write(f"[PTY-DEBUG] Found standalone tool_name: {tool_name}\n")
+                sys.stderr.flush()
 
         # Capture the command/file being operated on (line after tool name, before question)
         if tool_name and not tool_input and not question:
@@ -96,6 +108,11 @@ def detect_permission_prompt(text):
                 'requiresInput': 'type' in opt_label.lower() or 'tell' in opt_label.lower()
             })
 
+    # Debug output
+    if has_proceed and has_options:
+        sys.stderr.write(f"[PTY-DEBUG] Parsed: tool_name={tool_name}, question={question}, options={len(options)}\n")
+        sys.stderr.flush()
+
     # Only return if we found valid options AND a tool name
     if len(options) >= 2 and tool_name:
         return {
@@ -106,6 +123,11 @@ def detect_permission_prompt(text):
             'tool_input': {'command': tool_input} if tool_input else {},
             'options': options
         }
+    elif len(options) >= 2 and not tool_name:
+        sys.stderr.write(f"[PTY-DEBUG] Options found but NO tool_name! First 20 lines:\n")
+        for j, l in enumerate(lines[:20]):
+            sys.stderr.write(f"  {j}: {l[:80]}\n")
+        sys.stderr.flush()
 
     return None
 
@@ -286,8 +308,9 @@ def main():
                             send_prompt_to_fd(prompt)
                             # Clear buffer after sending prompt
                             output_buffer = ""
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        sys.stderr.write(f"[PTY] Error in prompt detection: {e}\n")
+                        sys.stderr.flush()
                 except OSError:
                     break
 

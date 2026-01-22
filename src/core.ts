@@ -360,6 +360,7 @@ export function startClaude(ctx: AppContext): void {
   ctx.isRunning = true;
 
   const stdio = ctx.claudeProcess.stdio as (NodeJS.ReadableStream | null)[];
+  log(`[DEBUG] stdio[3] available: ${!!stdio[3]}, stdio[4] available: ${!!stdio[4]}`, colors.yellow);
   stdio[4]?.on('data', (data: Buffer) => {
     // Only send terminal_output in agent mode
     if (ctx.options.agentUrl) {
@@ -369,18 +370,22 @@ export function startClaude(ctx: AppContext): void {
 
   let promptBuf = '';
   stdio[3]?.on('data', (data: Buffer) => {
-    promptBuf += data.toString();
+    const dataStr = data.toString();
+    log(`[DEBUG] FD3 received: ${dataStr.slice(0, 200)}`, colors.yellow);
+    promptBuf += dataStr;
     const lines = promptBuf.split('\n');
     promptBuf = lines.pop() || '';
     for (const line of lines) {
       try {
         const p = JSON.parse(line) as PermissionPrompt;
+        log(`[DEBUG] Parsed permission prompt: type=${p.type}, tool_name=${p.tool_name}`, colors.yellow);
         if (p.type === 'permission_prompt' && p.tool_name) {
           // Store pending permission for approval/denial
           ctx.pendingPermission = {
             command: p.tool_name,
             timestamp: Date.now(),
           };
+          log(`[DEBUG] Sending permission_request to bridge for tool: ${p.tool_name}`, colors.green);
           // Send permission request in format expected by bridge/clients
           sendToBridge(ctx, {
             type: 'permission_request',
@@ -391,8 +396,15 @@ export function startClaude(ctx: AppContext): void {
             displayText: p.tool_name,
             fullText: JSON.stringify(p.tool_input || {}, null, 2),
           });
+        } else {
+          log(`[DEBUG] Permission prompt missing type or tool_name`, colors.red);
         }
-      } catch { /* not json */ }
+      } catch (e) {
+        // Not JSON or parse error - log if it looks like a prompt
+        if (line.includes('permission') || line.includes('prompt')) {
+          log(`[DEBUG] FD3 parse error for line: ${line.slice(0, 100)}`, colors.red);
+        }
+      }
     }
   });
 
