@@ -12,11 +12,11 @@ import { v4 as uuidv4 } from 'uuid';
 import {
   DEFAULT_BRIDGE_URL,
   HEARTBEAT_INTERVAL,
-  RECONNECT_DELAY,
   MAX_MOBILE_MESSAGES,
   MAX_COMPLETED_TOOLS,
   E2E_PENDING_TIMEOUT_MS,
 } from './utils/config';
+import { Retry } from './utils/retry';
 import { colors } from './utils/colors';
 import { refreshIdToken, getUserInfo } from './auth';
 import { findClaudePath, getSessionFilePath } from './claude/process';
@@ -65,6 +65,8 @@ export function connectToBridge(ctx: AppContext): void {
 
   ctx.bridgeSocket.on('open', () => {
     logStatus('Connected to bridge server');
+    // Reset reconnect attempt counter on successful connection
+    ctx.reconnectAttempt = 0;
     ctx.bridgeSocket?.send(JSON.stringify({
       type: 'authenticate',
       token: ctx.authToken || 'dev-mode',
@@ -97,8 +99,10 @@ export function connectToBridge(ctx: AppContext): void {
       ctx.heartbeatTimer = null;
     }
     if (!ctx.isShuttingDown) {
-      logStatus(`Reconnecting in ${RECONNECT_DELAY / 1000}s...`);
-      ctx.reconnectTimer = setTimeout(() => connectToBridge(ctx), RECONNECT_DELAY);
+      ctx.reconnectAttempt += 1;
+      const delayMs = Retry.withJitter(Retry.delay(ctx.reconnectAttempt));
+      logStatus(`Reconnecting in ${Retry.formatDelay(delayMs)} (attempt ${ctx.reconnectAttempt})...`);
+      ctx.reconnectTimer = setTimeout(() => connectToBridge(ctx), delayMs);
     }
   });
 

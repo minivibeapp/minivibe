@@ -27,6 +27,7 @@ export class AgentState {
   hostName: string = os.hostname();
   reconnectTimer: NodeJS.Timeout | null = null;
   heartbeatTimer: NodeJS.Timeout | null = null;
+  reconnectAttempt = 0;
   e2eEnabled = false;
 
   // Track running sessions: sessionId -> session info

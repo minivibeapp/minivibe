@@ -89,6 +89,7 @@ export interface AppContext {
   bridgeSocket: WebSocket | null;
   reconnectTimer: NodeJS.Timeout | null;
   heartbeatTimer: NodeJS.Timeout | null;
+  reconnectAttempt: number;
 
   // Claude process
   claudeProcess: ChildProcess | null;
@@ -214,6 +215,7 @@ export function createAppContext(
     bridgeSocket: null,
     reconnectTimer: null,
     heartbeatTimer: null,
+    reconnectAttempt: 0,
 
     // Claude process
     claudeProcess: null,

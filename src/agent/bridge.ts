@@ -1,7 +1,8 @@
 import WebSocket from 'ws';
 import { v4 as uuidv4 } from 'uuid';
 import { colors } from '../utils/colors';
-import { RECONNECT_DELAY, HEARTBEAT_INTERVAL } from '../utils/config';
+import { HEARTBEAT_INTERVAL } from '../utils/config';
+import { Retry } from '../utils/retry';
 import { refreshIdToken } from '../auth';
 import { agentState } from './state';
 import { log } from './utils';
@@ -33,6 +34,8 @@ export function connect(): void {
   state.ws.on('open', () => {
     log('Connected to bridge', colors.green);
     state.clearReconnectTimer();
+    // Reset reconnect attempt counter on successful connection
+    state.reconnectAttempt = 0;
 
     if (state.authToken) {
       send({ type: 'authenticate', token: state.authToken });
@@ -92,17 +95,19 @@ export function send(msg: Record<string, unknown>): boolean {
 }
 
 /**
- * Schedule reconnect after delay
+ * Schedule reconnect after delay with exponential backoff
  */
 function scheduleReconnect(): void {
   const state = agentState;
   if (state.reconnectTimer) return;
 
-  log(`Reconnecting in ${RECONNECT_DELAY / 1000}s...`, colors.dim);
+  state.reconnectAttempt += 1;
+  const delayMs = Retry.withJitter(Retry.delay(state.reconnectAttempt));
+  log(`Reconnecting in ${Retry.formatDelay(delayMs)} (attempt ${state.reconnectAttempt})...`, colors.dim);
   state.reconnectTimer = setTimeout(() => {
     state.reconnectTimer = null;
     connect();
-  }, RECONNECT_DELAY);
+  }, delayMs);
 }
 
 /**
