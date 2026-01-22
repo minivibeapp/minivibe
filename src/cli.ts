@@ -74,7 +74,7 @@ function parseArgs(argv: string[]): { options: CliOptions; subcommand: Subcomman
     else if (a === '--json') options.jsonMode = true;
     else if (a === '--e2e') options.e2eEnabled = true;
     else if (a === '--node-pty') options.useNodePty = true;
-    else if (a === '--dangerously-skip-permissions') options.skipPermissions = true;
+    else if (a === '--dangerously-skip-permissions' || a === '--yolo' || a === '-y') options.skipPermissions = true;
     else if (a === '--list') options.listSessions = true;
     else if (a === '--bridge') {
       const nextArg = args[i + 1];
