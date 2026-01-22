@@ -108,6 +108,20 @@ def detect_permission_prompt(text):
                 'requiresInput': 'type' in opt_label.lower() or 'tell' in opt_label.lower()
             })
 
+    # If tool_name not found, try to infer from options text
+    if not tool_name and options:
+        options_text = ' '.join(opt.get('label', '') for opt in options).lower()
+        if 'access' in options_text or 'read' in options_text:
+            tool_name = 'Read'
+            sys.stderr.write(f"[PTY-DEBUG] Inferred tool_name from options: Read\n")
+        elif 'execute' in options_text or 'run' in options_text or 'command' in options_text:
+            tool_name = 'Bash'
+            sys.stderr.write(f"[PTY-DEBUG] Inferred tool_name from options: Bash\n")
+        elif 'edit' in options_text or 'modify' in options_text or 'write' in options_text:
+            tool_name = 'Edit'
+            sys.stderr.write(f"[PTY-DEBUG] Inferred tool_name from options: Edit\n")
+        sys.stderr.flush()
+
     # Debug output
     if has_proceed and has_options:
         sys.stderr.write(f"[PTY-DEBUG] Parsed: tool_name={tool_name}, question={question}, options={len(options)}\n")
@@ -124,10 +138,17 @@ def detect_permission_prompt(text):
             'options': options
         }
     elif len(options) >= 2 and not tool_name:
-        sys.stderr.write(f"[PTY-DEBUG] Options found but NO tool_name! First 20 lines:\n")
-        for j, l in enumerate(lines[:20]):
-            sys.stderr.write(f"  {j}: {l[:80]}\n")
+        # Last resort: use generic "Tool" as fallback
+        sys.stderr.write(f"[PTY-DEBUG] Using fallback tool_name='Tool'\n")
         sys.stderr.flush()
+        return {
+            'type': 'permission_prompt',
+            'prompt_id': str(uuid.uuid4()),
+            'tool_name': 'Tool',
+            'question': question or 'Permission required',
+            'tool_input': {'command': tool_input} if tool_input else {},
+            'options': options
+        }
 
     return None
 
@@ -298,9 +319,9 @@ def main():
                     try:
                         text = data.decode('utf-8', errors='replace')
                         output_buffer += text
-                        # Keep buffer reasonable size (last 2KB)
-                        if len(output_buffer) > 2048:
-                            output_buffer = output_buffer[-2048:]
+                        # Keep buffer reasonable size (last 8KB to capture tool name headers)
+                        if len(output_buffer) > 8192:
+                            output_buffer = output_buffer[-8192:]
 
                         # Try to detect permission prompt
                         prompt = detect_permission_prompt(output_buffer)
