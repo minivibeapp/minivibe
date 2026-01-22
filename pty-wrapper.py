@@ -105,18 +105,23 @@ def main():
 
     cmd = sys.argv[1:]
 
-    # Save original terminal settings if stdin is a tty
+    # Check if stdin/stdout are TTYs
+    # Note: stdin may be a pipe from parent, but stdout is typically inherited
     stdin_is_tty = os.isatty(sys.stdin.fileno())
+    stdout_is_tty = os.isatty(sys.stdout.fileno())
+
+    # Save original terminal settings if stdin is a tty
     if stdin_is_tty:
         old_settings = termios.tcgetattr(sys.stdin)
 
     # Create pseudo-terminal
     master_fd, slave_fd = pty.openpty()
 
-    # Get terminal size and apply to PTY
-    if stdin_is_tty:
+    # Get terminal size from stdout (which is typically inherited from parent terminal)
+    # This works even when stdin is a pipe
+    if stdout_is_tty:
         try:
-            rows, cols = os.get_terminal_size()
+            rows, cols = os.get_terminal_size(sys.stdout.fileno())
             set_winsize(slave_fd, rows, cols)
         except OSError:
             set_winsize(slave_fd, 24, 80)
@@ -154,9 +159,9 @@ def main():
 
     # Handle window resize
     def handle_sigwinch(signum, frame):
-        if stdin_is_tty:
+        if stdout_is_tty:
             try:
-                rows, cols = os.get_terminal_size()
+                rows, cols = os.get_terminal_size(sys.stdout.fileno())
                 set_winsize(master_fd, rows, cols)
             except OSError:
                 pass
