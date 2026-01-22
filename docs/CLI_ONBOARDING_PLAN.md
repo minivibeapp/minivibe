@@ -99,7 +99,7 @@ vibe --e2e              → With encryption
      --bridge <url>          Override bridge URL (default: wss://ws.minivibeapp.com)
      --name <name>           Name this session
      --resume <id>           Resume previous session
-     --dangerously-skip-permissions  Auto-approve all tools
+     -y, --yolo              Skip all permission prompts
    ```
 
 ### Phase 3: Update README

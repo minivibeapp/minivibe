@@ -155,7 +155,7 @@ This is useful for:
 | `--remote <id>` | Remote control session via bridge (no local Claude needed) |
 | `--list` | List running sessions on local agent |
 | `--e2e` | Enable end-to-end encryption (auto key exchange with iOS) |
-| `--dangerously-skip-permissions` | Auto-approve all tool executions |
+| `-y, --yolo` | Skip all permission prompts (alias: `--dangerously-skip-permissions`) |
 | `--bridge <url>` | Override bridge URL (default: wss://ws.minivibeapp.com) |
 | `--token <token>` | Set Firebase auth token manually |
 | `--logout` | Remove stored auth token |
@@ -178,9 +178,12 @@ This is useful for:
 For automated/headless environments where you trust the execution context:
 
 ```bash
-vibe --dangerously-skip-permissions
-vibe --dangerously-skip-permissions --agent
+vibe -y                # shorthand
+vibe --yolo            # memorable alias
+vibe --yolo --agent    # with local agent
 ```
+
+All three forms are equivalent: `-y`, `--yolo`, `--dangerously-skip-permissions`
 
 **Warning:** This mode auto-approves ALL tool executions (commands, file writes, etc.) without prompting. Only use in trusted/sandboxed environments.
 
