@@ -398,16 +398,28 @@ export function handleStopSession(msg: BridgeMessage): void {
   try {
     if (session.process) {
       // Spawned session - kill the process
-      if (process.platform === 'win32') {
-        session.process.kill();
-      } else {
-        session.process.kill('SIGTERM');
+      const proc = session.process;
+      let processExited = false;
 
-        // Force kill after timeout
+      // Track when process exits to avoid race condition
+      const exitHandler = () => { processExited = true; };
+      proc.once('exit', exitHandler);
+
+      if (process.platform === 'win32') {
+        proc.kill();
+      } else {
+        proc.kill('SIGTERM');
+
+        // Force kill after timeout, but only if process hasn't exited
         setTimeout(() => {
-          if (state.runningSessions.has(sessionId as string) && session.process) {
-            session.process.kill('SIGKILL');
+          if (!processExited && state.runningSessions.has(sessionId as string)) {
+            try {
+              proc.kill('SIGKILL');
+            } catch {
+              // Process may have already exited
+            }
           }
+          proc.off('exit', exitHandler);
         }, 5000);
       }
     } else if (session.localWs) {

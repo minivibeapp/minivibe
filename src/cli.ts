@@ -76,12 +76,31 @@ function parseArgs(argv: string[]): { options: CliOptions; subcommand: Subcomman
     else if (a === '--node-pty') options.useNodePty = true;
     else if (a === '--dangerously-skip-permissions') options.skipPermissions = true;
     else if (a === '--list') options.listSessions = true;
-    else if (a === '--bridge') options.bridgeUrl = args[++i] || null;
-    else if (a === '--agent') options.agentUrl = args[++i] || discoverAgent();
-    else if (a === '--resume' || a === '-r') options.resumeSessionId = args[++i] || null;
-    else if (a === '--name') options.sessionName = args[++i] || null;
-    else if (a === '--remote') { options.remoteAttachMode = true; options.resumeSessionId = args[++i] || null; }
-    else if (a === '--token') i++; // skip token value
+    else if (a === '--bridge') {
+      const nextArg = args[i + 1];
+      options.bridgeUrl = (nextArg && !nextArg.startsWith('-')) ? args[++i] : null;
+    }
+    else if (a === '--agent') {
+      const nextArg = args[i + 1];
+      options.agentUrl = (nextArg && !nextArg.startsWith('-')) ? args[++i] : discoverAgent();
+    }
+    else if (a === '--resume' || a === '-r') {
+      const nextArg = args[i + 1];
+      options.resumeSessionId = (nextArg && !nextArg.startsWith('-')) ? args[++i] : null;
+    }
+    else if (a === '--name') {
+      const nextArg = args[i + 1];
+      options.sessionName = (nextArg && !nextArg.startsWith('-')) ? args[++i] : null;
+    }
+    else if (a === '--remote') {
+      options.remoteAttachMode = true;
+      const nextArg = args[i + 1];
+      options.resumeSessionId = (nextArg && !nextArg.startsWith('-')) ? args[++i] : null;
+    }
+    else if (a === '--token') {
+      // skip token value if present
+      if (args[i + 1] && !args[i + 1].startsWith('-')) i++;
+    }
     else if (!a.startsWith('-') && !options.initialPrompt) options.initialPrompt = a;
   }
 

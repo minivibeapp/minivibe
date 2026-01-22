@@ -122,6 +122,9 @@ export interface AppContext {
   // Signal handlers (for cleanup)
   sigwinchHandler: (() => void) | null;
 
+  // Stdin handler (for cleanup)
+  stdinHandler: ((data: Buffer) => void) | null;
+
   // Callbacks (set by CLI)
   callbacks: AppCallbacks;
 }
@@ -248,6 +251,9 @@ export function createAppContext(
 
     // Signal handlers
     sigwinchHandler: null,
+
+    // Stdin handler
+    stdinHandler: null,
 
     // Callbacks (will be set by CLI)
     callbacks: {

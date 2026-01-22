@@ -99,6 +99,47 @@ function waitForMessage(
 }
 
 /**
+ * Sanitize and validate file path to prevent path traversal attacks
+ * Returns the resolved path if valid, or null if the path is unsafe
+ * All paths (relative or absolute) must resolve to within the base directory
+ */
+function sanitizePath(filePath: string, baseDir: string = process.cwd()): string | null {
+  // Resolve to absolute path
+  const resolved = path.isAbsolute(filePath)
+    ? path.resolve(filePath)
+    : path.resolve(baseDir, filePath);
+
+  const normalizedBase = path.resolve(baseDir);
+  const normalizedResolved = path.resolve(resolved);
+
+  // All paths must be within the base directory (security: prevent access outside cwd)
+  if (!normalizedResolved.startsWith(normalizedBase + path.sep) && normalizedResolved !== normalizedBase) {
+    return null; // Path traversal attempt or absolute path outside cwd
+  }
+
+  return normalizedResolved;
+}
+
+/**
+ * Sanitize filename to prevent path traversal in downloaded files
+ * Removes directory components and dangerous characters
+ */
+function sanitizeFileName(fileName: string): string {
+  // Get only the base name (removes any directory components)
+  let sanitized = path.basename(fileName);
+
+  // Remove any null bytes or other dangerous characters
+  sanitized = sanitized.replace(/[\x00-\x1f]/g, '');
+
+  // If the result is empty or just dots, use a safe default
+  if (!sanitized || sanitized === '.' || sanitized === '..') {
+    return 'downloaded_file';
+  }
+
+  return sanitized;
+}
+
+/**
  * /upload <path> - Upload file to cloud storage
  */
 export async function slashCmdUpload(
@@ -111,8 +152,12 @@ export async function slashCmdUpload(
     return;
   }
 
-  // Resolve path relative to cwd
-  const fullPath = path.isAbsolute(filePath) ? filePath : path.join(process.cwd(), filePath);
+  // Resolve and sanitize path to prevent traversal attacks
+  const fullPath = sanitizePath(filePath);
+  if (!fullPath) {
+    log(`\n${colors.red}Invalid file path: path traversal not allowed${colors.reset}\n`);
+    return;
+  }
 
   if (!fs.existsSync(fullPath)) {
     log(`\n${colors.red}File not found: ${filePath}${colors.reset}\n`);
@@ -271,8 +316,22 @@ export async function slashCmdDownload(
       }).on('error', reject);
     });
 
-    // Write to file
-    const outPath = outputPath || path.join(process.cwd(), fileName);
+    // Sanitize filename from server to prevent path traversal
+    const safeFileName = sanitizeFileName(fileName);
+
+    // Determine output path - sanitize user-provided path too
+    let outPath: string;
+    if (outputPath) {
+      const sanitizedOutput = sanitizePath(outputPath);
+      if (!sanitizedOutput) {
+        log(`${colors.red}Invalid output path: path traversal not allowed${colors.reset}\n`);
+        return;
+      }
+      outPath = sanitizedOutput;
+    } else {
+      outPath = path.join(process.cwd(), safeFileName);
+    }
+
     fs.writeFileSync(outPath, fileData);
 
     log(`${colors.green}Downloaded ${fileName}${colors.reset}`);

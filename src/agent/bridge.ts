@@ -192,15 +192,17 @@ function handleMessage(msg: BridgeMessage): void {
       log(`Authentication failed: ${msg.message}`, colors.yellow);
 
       // Try to refresh token
-      (async () => {
-        const newToken = await refreshIdToken();
+      refreshIdToken().then(newToken => {
         if (newToken) {
           state.authToken = newToken;
           send({ type: 'authenticate', token: newToken });
         } else {
           log('Please re-login: vibe-agent login', colors.red);
         }
-      })();
+      }).catch(err => {
+        log(`Token refresh failed: ${err instanceof Error ? err.message : err}`, colors.red);
+        log('Please re-login: vibe-agent login', colors.red);
+      });
       break;
 
     case 'agent_registered':
@@ -246,8 +248,7 @@ function handleMessage(msg: BridgeMessage): void {
         errorLower.includes('unauthorized')
       ) {
         log('Attempting token refresh...', colors.yellow);
-        (async () => {
-          const newToken = await refreshIdToken();
+        refreshIdToken().then(newToken => {
           if (newToken) {
             state.authToken = newToken;
             log('Token refreshed, re-authenticating...', colors.green);
@@ -255,7 +256,10 @@ function handleMessage(msg: BridgeMessage): void {
           } else {
             log('Token refresh failed. Please re-login: vibe-agent login', colors.red);
           }
-        })();
+        }).catch(err => {
+          log(`Token refresh error: ${err instanceof Error ? err.message : err}`, colors.red);
+          log('Please re-login: vibe-agent login', colors.red);
+        });
       }
       break;
 

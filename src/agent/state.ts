@@ -90,7 +90,10 @@ export class AgentState {
 
         for (const [sessionId, info] of Object.entries(data)) {
           const entry = info as SessionHistoryEntry;
-          if (new Date(entry.endedAt).getTime() >= cutoffTime) {
+          // Validate the date before using it
+          const endedAtTime = new Date(entry.endedAt).getTime();
+          // Check for invalid date (NaN) - skip invalid entries
+          if (!isNaN(endedAtTime) && endedAtTime >= cutoffTime) {
             map.set(sessionId, entry);
           }
         }

@@ -191,6 +191,10 @@ function handleBridgeMessage(ctx: AppContext, msg: Record<string, unknown>): voi
           log('Please re-login: vibe login', colors.red);
           process.exit(1);
         }
+      }).catch(err => {
+        logStatus(`Token refresh error: ${err instanceof Error ? err.message : err}`);
+        log('Please re-login: vibe login', colors.red);
+        process.exit(1);
       });
       break;
 
@@ -277,8 +281,8 @@ function handleUserMessage(ctx: AppContext, msg: Record<string, unknown>): void 
     }
   }
 
-  // Validate content
-  if (!content || typeof content !== 'string') {
+  // Validate content - reject empty strings and non-strings
+  if (!content || typeof content !== 'string' || content.trim().length === 0) {
     return;
   }
 
@@ -362,6 +366,15 @@ export function startClaude(ctx: AppContext): void {
 
   const stdio = ctx.claudeProcess.stdio as (NodeJS.ReadableStream | null)[];
   logStatus(`[DEBUG] stdio[3] available: ${!!stdio[3]}, stdio[4] available: ${!!stdio[4]}`);
+
+  // Add error handlers to prevent unhandled stream errors
+  stdio[3]?.on('error', (err) => {
+    logStatus(`[WARN] stdio[3] error: ${err.message}`);
+  });
+  stdio[4]?.on('error', (err) => {
+    logStatus(`[WARN] stdio[4] error: ${err.message}`);
+  });
+
   stdio[4]?.on('data', (data: Buffer) => {
     // Only send terminal_output in agent mode
     if (ctx.options.agentUrl) {
@@ -369,11 +382,25 @@ export function startClaude(ctx: AppContext): void {
     }
   });
 
+  const MAX_PROMPT_BUFFER_SIZE = 64 * 1024; // 64KB max buffer size
   let promptBuf = '';
   stdio[3]?.on('data', (data: Buffer) => {
     const dataStr = data.toString();
     logStatus(`[DEBUG] FD3 received: ${dataStr.slice(0, 200)}`);
     promptBuf += dataStr;
+
+    // Prevent unbounded buffer growth
+    if (promptBuf.length > MAX_PROMPT_BUFFER_SIZE) {
+      logStatus(`[WARN] Prompt buffer exceeded ${MAX_PROMPT_BUFFER_SIZE} bytes, truncating`);
+      // Keep only the last portion that might contain a complete line
+      promptBuf = promptBuf.slice(-MAX_PROMPT_BUFFER_SIZE / 2);
+      // Find the first newline to ensure we start at a line boundary
+      const firstNewline = promptBuf.indexOf('\n');
+      if (firstNewline !== -1) {
+        promptBuf = promptBuf.slice(firstNewline + 1);
+      }
+    }
+
     const lines = promptBuf.split('\n');
     promptBuf = lines.pop() || '';
     for (const line of lines) {
@@ -453,18 +480,32 @@ function startSessionWatcher(ctx: AppContext): void {
   const { logStatus } = ctx.callbacks;
   const sessionFile = getSessionFilePath(ctx.sessionId);
   logStatus(`Watching for session file: ${sessionFile}`);
+
+  let intervalCleared = false;
+  let fileWatcher: fs.FSWatcher | null = null;
+
   const check = setInterval(() => {
     if (fs.existsSync(sessionFile)) {
       clearInterval(check);
+      intervalCleared = true;
       logStatus(`Session file found, starting watcher`);
       try {
-        const watcher = fs.watch(sessionFile, () => processSessionFile(ctx, sessionFile));
-        ctx.sessionFileWatcher = () => watcher.close();
+        fileWatcher = fs.watch(sessionFile, () => processSessionFile(ctx, sessionFile));
+        fileWatcher.on('error', () => { /* ignore watch errors */ });
         processSessionFile(ctx, sessionFile);
       } catch { /* ignore */ }
     }
   }, 1000);
-  ctx.sessionFileWatcher = () => clearInterval(check);
+
+  // Cleanup function that handles both states
+  ctx.sessionFileWatcher = () => {
+    if (!intervalCleared) {
+      clearInterval(check);
+    }
+    if (fileWatcher) {
+      fileWatcher.close();
+    }
+  };
 }
 
 /**
@@ -489,14 +530,9 @@ function extractTextContent(content: unknown): string {
         }
       }
       parts.push(desc);
-    } else if (block.type === 'tool_result' && block.content) {
-      const result = typeof block.content === 'string' ? block.content : JSON.stringify(block.content);
-      if (result.length < 1000) {
-        parts.push(`*Result:*\n${result}`);
-      } else {
-        parts.push(`*Result:* (${result.length} chars)`);
-      }
     }
+    // Note: tool_result blocks are skipped - they appear in separate type='user' entries
+    // which we filter out in processSessionFile to avoid incorrect sender='user' display
   }
   return parts.join('\n\n');
 }
@@ -517,10 +553,24 @@ function processSessionFile(ctx: AppContext, file: string): void {
     if (stats.size <= ctx.lastFileSize) return;
 
     // Read only new bytes from the file
-    const fd = fs.openSync(file, 'r');
-    const buffer = Buffer.alloc(stats.size - ctx.lastFileSize);
-    fs.readSync(fd, buffer, 0, buffer.length, ctx.lastFileSize);
-    fs.closeSync(fd);
+    // Use try-finally to ensure fd is always closed, even if read fails
+    let fd: number | null = null;
+    let buffer: Buffer;
+    try {
+      fd = fs.openSync(file, 'r');
+      buffer = Buffer.alloc(stats.size - ctx.lastFileSize);
+      fs.readSync(fd, buffer, 0, buffer.length, ctx.lastFileSize);
+    } catch (readErr) {
+      // File may have been deleted/rotated between stat and read
+      logStatus(`[WARN] Failed to read session file: ${readErr instanceof Error ? readErr.message : readErr}`);
+      return;
+    } finally {
+      if (fd !== null) {
+        try {
+          fs.closeSync(fd);
+        } catch { /* ignore close errors */ }
+      }
+    }
     ctx.lastFileSize = stats.size;
 
     const newContent = buffer.toString('utf8');
@@ -532,6 +582,28 @@ function processSessionFile(ctx: AppContext, file: string): void {
         const msg = JSON.parse(line);
         const role = msg.type; // 'user' or 'assistant'
         const msgContent = msg.message?.content;
+
+        // Check if this is a tool_result entry (type='user' but contains only tool_result blocks)
+        // Tool results are input TO Claude in the API sense, but should not show as user messages in UI
+        const isToolResultOnly = role === 'user' && Array.isArray(msgContent) &&
+          msgContent.length > 0 &&
+          msgContent.every((block: { type?: string }) => block.type === 'tool_result');
+
+        // Skip tool_result-only entries - they're already captured in the assistant's tool_use display
+        if (isToolResultOnly) {
+          logStatus(`Skipping tool_result-only entry: uuid=${msg.uuid?.slice(0, 8)}`);
+          // Still track completed tools
+          for (const b of msgContent) {
+            if (b.tool_use_id) {
+              ctx.completedToolIds.add(b.tool_use_id);
+              if (ctx.completedToolIds.size > MAX_COMPLETED_TOOLS) {
+                const first = ctx.completedToolIds.values().next().value;
+                if (first) ctx.completedToolIds.delete(first);
+              }
+            }
+          }
+          continue;
+        }
 
         // Extract text content
         const textContent = extractTextContent(msgContent);
@@ -683,11 +755,18 @@ function handleSlashCommand(ctx: AppContext, input: string): boolean {
  */
 export function setupTerminalInput(ctx: AppContext): void {
   if (!process.stdin.isTTY) return;
+
+  // Remove any existing handler to prevent duplicates
+  if (ctx.stdinHandler) {
+    process.stdin.off('data', ctx.stdinHandler);
+  }
+
   process.stdin.setRawMode(true);
   terminalRawMode = true;
   process.stdin.resume();
 
-  process.stdin.on('data', (data: Buffer) => {
+  // Create and store handler for cleanup
+  const handler = (data: Buffer) => {
     const str = data.toString();
 
     // Ctrl+C - cleanup and exit
@@ -728,13 +807,19 @@ export function setupTerminalInput(ctx: AppContext): void {
       // Backspace - remove last char from buffer
       ctx.inputBuffer = ctx.inputBuffer.slice(0, -1);
     } else if (str.length === 1 && str >= ' ') {
-      // Printable character
-      ctx.inputBuffer += str;
+      // Printable character - limit buffer size to prevent unbounded growth
+      const MAX_INPUT_BUFFER_SIZE = 4096;
+      if (ctx.inputBuffer.length < MAX_INPUT_BUFFER_SIZE) {
+        ctx.inputBuffer += str;
+      }
     }
 
     // Pass through to Claude
     ctx.claudeProcess?.stdin?.writable && ctx.claudeProcess.stdin.write(data);
-  });
+  };
+
+  ctx.stdinHandler = handler;
+  process.stdin.on('data', handler);
 }
 
 /**
@@ -752,14 +837,52 @@ export function setupShutdown(ctx: AppContext): void {
  */
 export function cleanup(ctx: AppContext): void {
   ctx.isShuttingDown = true;
-  if (ctx.heartbeatTimer) clearInterval(ctx.heartbeatTimer);
-  if (ctx.reconnectTimer) clearTimeout(ctx.reconnectTimer);
-  if (ctx.sessionFileWatcher) ctx.sessionFileWatcher();
+
+  // Clear timers
+  if (ctx.heartbeatTimer) {
+    clearInterval(ctx.heartbeatTimer);
+    ctx.heartbeatTimer = null;
+  }
+  if (ctx.reconnectTimer) {
+    clearTimeout(ctx.reconnectTimer);
+    ctx.reconnectTimer = null;
+  }
+
+  // Clear file watcher
+  if (ctx.sessionFileWatcher) {
+    ctx.sessionFileWatcher();
+    ctx.sessionFileWatcher = null;
+  }
+
+  // Clear signal handler
   if (ctx.sigwinchHandler) {
     process.off('SIGWINCH', ctx.sigwinchHandler);
     ctx.sigwinchHandler = null;
   }
-  if (ctx.bridgeSocket) ctx.bridgeSocket.close();
-  if (ctx.claudeProcess && !ctx.claudeProcess.killed) ctx.claudeProcess.kill('SIGTERM');
+
+  // Clear stdin handler
+  if (ctx.stdinHandler) {
+    process.stdin.off('data', ctx.stdinHandler);
+    ctx.stdinHandler = null;
+  }
+
+  // Clear state collections
+  ctx.mobileMessageHashes.clear();
+  ctx.completedToolIds.clear();
+  ctx.e2ePendingMessages.length = 0;
+  ctx.inputBuffer = '';
+  ctx.pendingPermission = null;
+
+  // Close connections
+  if (ctx.bridgeSocket) {
+    ctx.bridgeSocket.close();
+    ctx.bridgeSocket = null;
+  }
+
+  // Kill Claude process
+  if (ctx.claudeProcess && !ctx.claudeProcess.killed) {
+    ctx.claudeProcess.kill('SIGTERM');
+  }
+
   restoreTerminal();
 }
