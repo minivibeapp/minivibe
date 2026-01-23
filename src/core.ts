@@ -162,6 +162,7 @@ function handleBridgeMessage(ctx: AppContext, msg: Record<string, unknown>): voi
         path: process.cwd(),
         name: ctx.options.sessionName || path.basename(process.cwd()),
         e2e: ctx.options.e2eEnabled,
+        yolo: ctx.options.skipPermissions,
       }));
       break;
 

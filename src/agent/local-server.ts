@@ -186,6 +186,7 @@ function handleLocalMessage(clientWs: WebSocket, msg: LocalMessage): void {
 
     case 'register_session': {
       const sessionId = msg.sessionId as string;
+      const yolo = !!(msg.yolo as boolean);
       clientInfo.sessionId = sessionId;
 
       state.runningSessions.set(sessionId, {
@@ -194,11 +195,12 @@ function handleLocalMessage(clientWs: WebSocket, msg: LocalMessage): void {
         name: (msg.name as string) || path.basename((msg.path as string) || process.cwd()),
         startedAt: new Date().toISOString(),
         managed: true,
+        yolo,
         attachedClients: new Set(),
       });
 
       log(
-        `Local session registered: ${sessionId.slice(0, 8)} (${msg.name || msg.path})`,
+        `Local session registered: ${sessionId.slice(0, 8)} (${msg.name || msg.path})${yolo ? ' (yolo mode)' : ''}`,
         colors.green
       );
 
@@ -272,6 +274,7 @@ function handleLocalMessage(clientWs: WebSocket, msg: LocalMessage): void {
           sessionId: attachSessionId,
           name: session.name,
           path: session.path,
+          yolo: !!session.yolo,
         })
       );
       break;
@@ -287,6 +290,7 @@ function handleLocalMessage(clientWs: WebSocket, msg: LocalMessage): void {
           path: session.path,
           startedAt: session.startedAt,
           source,
+          yolo: !!session.yolo,
         });
       }
       clientWs.send(JSON.stringify({ type: 'sessions_list', sessions: sessionsList }));

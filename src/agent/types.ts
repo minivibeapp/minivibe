@@ -36,6 +36,7 @@ export interface RunningSession {
   name: string;
   startedAt: string;
   managed?: boolean;
+  yolo?: boolean; // Whether session runs with --dangerously-skip-permissions
   attachedClients: Set<WebSocket>;
 }
 
@@ -100,6 +101,7 @@ export interface BridgeMessage {
   content?: string | { ciphertext?: string };
   error?: string;
   exitCode?: number;
+  yolo?: boolean; // Skip all permission prompts (--dangerously-skip-permissions)
   [key: string]: unknown;
 }
 

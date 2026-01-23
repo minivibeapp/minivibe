@@ -53,9 +53,9 @@ export function findVibeCli(): string | null {
  */
 export function handleStartSession(msg: BridgeMessage): void {
   const state = agentState;
-  const { sessionId, path: projectPath, name, prompt, requestId } = msg;
+  const { sessionId, path: projectPath, name, prompt, requestId, yolo } = msg;
 
-  log(`Starting session: ${name || projectPath || 'new'}`, colors.cyan);
+  log(`Starting session: ${name || projectPath || 'new'}${yolo ? ' (yolo mode)' : ''}`, colors.cyan);
 
   const vibeCli = findVibeCli();
   if (!vibeCli) {
@@ -71,6 +71,10 @@ export function handleStartSession(msg: BridgeMessage): void {
 
   // Build args - use --agent to connect via local server
   const args = ['--agent', `ws://localhost:${LOCAL_SERVER_PORT}`];
+
+  if (yolo) {
+    args.push('--yolo');
+  }
 
   if (state.e2eEnabled) {
     args.push('--e2e');
@@ -119,6 +123,7 @@ export function handleStartSession(msg: BridgeMessage): void {
       path: cwd,
       name: (name as string) || path.basename(cwd),
       startedAt: new Date().toISOString(),
+      yolo: !!yolo,
       attachedClients: new Set(),
     });
 
@@ -173,9 +178,10 @@ export function handleStartSession(msg: BridgeMessage): void {
       sessionId: newSessionId,
       path: cwd,
       name: (name as string) || path.basename(cwd),
+      yolo: !!yolo,
     });
 
-    log(`Session started: ${newSessionId.slice(0, 8)}`, colors.green);
+    log(`Session started: ${newSessionId.slice(0, 8)}${yolo ? ' (yolo mode)' : ''}`, colors.green);
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error';
     log(`Failed to start session: ${message}`, colors.red);
@@ -193,7 +199,7 @@ export function handleStartSession(msg: BridgeMessage): void {
  */
 export function handleResumeSession(msg: BridgeMessage): void {
   const state = agentState;
-  const { sessionId, path: projectPath, name, requestId } = msg;
+  const { sessionId, path: projectPath, name, requestId, yolo } = msg;
 
   if (!sessionId) {
     log('Resume session called without sessionId', colors.red);
@@ -205,7 +211,7 @@ export function handleResumeSession(msg: BridgeMessage): void {
     return;
   }
 
-  log(`Resuming session: ${(sessionId as string).slice(0, 8)}`, colors.cyan);
+  log(`Resuming session: ${(sessionId as string).slice(0, 8)}${yolo ? ' (yolo mode)' : ''}`, colors.cyan);
 
   if (state.runningSessions.has(sessionId as string)) {
     log('Session is already running', colors.yellow);
@@ -242,6 +248,10 @@ export function handleResumeSession(msg: BridgeMessage): void {
   }
 
   const args = ['--agent', `ws://localhost:${LOCAL_SERVER_PORT}`, '--resume', sessionId as string];
+
+  if (yolo) {
+    args.push('--yolo');
+  }
 
   if (state.e2eEnabled) {
     args.push('--e2e');
@@ -306,6 +316,7 @@ export function handleResumeSession(msg: BridgeMessage): void {
       path: cwd,
       name: effectiveName || path.basename(cwd),
       startedAt: new Date().toISOString(),
+      yolo: !!yolo,
       attachedClients: new Set(),
     });
 
@@ -360,9 +371,10 @@ export function handleResumeSession(msg: BridgeMessage): void {
       sessionId,
       path: cwd,
       name: effectiveName || path.basename(cwd),
+      yolo: !!yolo,
     });
 
-    log(`Session resumed: ${(sessionId as string).slice(0, 8)}`, colors.green);
+    log(`Session resumed: ${(sessionId as string).slice(0, 8)}${yolo ? ' (yolo mode)' : ''}`, colors.green);
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error';
     log(`Failed to resume session: ${message}`, colors.red);

@@ -159,7 +159,7 @@ function handleMessage(msg: BridgeMessage): void {
       // Re-register all sessions with bridge after reconnect
       for (const [sessionId, session] of state.runningSessions) {
         log(
-          `Re-registering session: ${sessionId.slice(0, 8)} (${session.managed ? 'managed' : 'spawned'})`,
+          `Re-registering session: ${sessionId.slice(0, 8)} (${session.managed ? 'managed' : 'spawned'}${session.yolo ? ', yolo' : ''})`,
           colors.dim
         );
         send({
@@ -169,6 +169,7 @@ function handleMessage(msg: BridgeMessage): void {
           name: session.name,
           agentId: state.agentId,
           agentHostName: state.hostName,
+          yolo: !!session.yolo,
         });
       }
 
@@ -232,6 +233,7 @@ function handleMessage(msg: BridgeMessage): void {
           path: s.path,
           name: s.name,
           status: 'active',
+          yolo: !!s.yolo,
         })),
       });
       break;

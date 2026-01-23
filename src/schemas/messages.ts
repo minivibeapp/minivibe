@@ -30,6 +30,7 @@ export const RegisterSessionMessageSchema = z.object({
   path: z.string(),
   name: z.string(),
   e2e: z.boolean().optional(),
+  yolo: z.boolean().optional(),
   agentId: z.string().optional(),
   agentHostName: z.string().optional(),
 });
