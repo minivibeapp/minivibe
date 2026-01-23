@@ -78,7 +78,15 @@ function parseArgs(argv: string[]): { options: CliOptions; subcommand: Subcomman
     else if (a === '--list') options.listSessions = true;
     else if (a === '--bridge') {
       const nextArg = args[i + 1];
-      options.bridgeUrl = (nextArg && !nextArg.startsWith('-')) ? args[++i] : null;
+      const url = (nextArg && !nextArg.startsWith('-')) ? args[++i] : null;
+      if (!url) {
+        console.log(formatError({
+          message: '--bridge requires a URL',
+          suggestions: ['Usage: vibe --bridge <url>', 'Example: vibe --bridge wss://custom.server.com'],
+        }));
+        process.exit(1);
+      }
+      options.bridgeUrl = url;
     }
     else if (a === '--agent') {
       const nextArg = args[i + 1];
@@ -86,20 +94,56 @@ function parseArgs(argv: string[]): { options: CliOptions; subcommand: Subcomman
     }
     else if (a === '--resume' || a === '-r') {
       const nextArg = args[i + 1];
-      options.resumeSessionId = (nextArg && !nextArg.startsWith('-')) ? args[++i] : null;
+      const sessionId = (nextArg && !nextArg.startsWith('-')) ? args[++i] : null;
+      if (!sessionId) {
+        console.log(formatError({
+          message: '--resume requires a session ID',
+          suggestions: ['Usage: vibe --resume <session-id>'],
+        }));
+        process.exit(1);
+      }
+      options.resumeSessionId = sessionId;
     }
     else if (a === '--name') {
       const nextArg = args[i + 1];
-      options.sessionName = (nextArg && !nextArg.startsWith('-')) ? args[++i] : null;
+      const name = (nextArg && !nextArg.startsWith('-')) ? args[++i] : null;
+      if (!name) {
+        console.log(formatError({
+          message: '--name requires a value',
+          suggestions: ['Usage: vibe --name <session-name>'],
+        }));
+        process.exit(1);
+      }
+      options.sessionName = name;
     }
     else if (a === '--remote') {
       options.remoteAttachMode = true;
       const nextArg = args[i + 1];
       options.resumeSessionId = (nextArg && !nextArg.startsWith('-')) ? args[++i] : null;
     }
+    else if (a === '--attach') {
+      options.attachMode = true;
+      const nextArg = args[i + 1];
+      options.attachSessionId = (nextArg && !nextArg.startsWith('-')) ? args[++i] : null;
+    }
     else if (a === '--token') {
-      // skip token value if present
-      if (args[i + 1] && !args[i + 1].startsWith('-')) i++;
+      const nextArg = args[i + 1];
+      const token = (nextArg && !nextArg.startsWith('-')) ? args[++i] : null;
+      if (!token) {
+        console.log(formatError({
+          message: '--token requires a value',
+          suggestions: ['Usage: vibe --token <firebase-token>', 'Get token from MiniVibe iOS app: Settings > Copy Token'],
+        }));
+        process.exit(1);
+      }
+      options.manualToken = token;
+    }
+    else if (a.startsWith('-') && a !== '-') {
+      console.log(formatError({
+        message: `Unknown option: ${a}`,
+        suggestions: ['Run: vibe --help'],
+      }));
+      process.exit(1);
     }
     else if (!a.startsWith('-') && !options.initialPrompt) options.initialPrompt = a;
   }
@@ -171,6 +215,60 @@ async function main(): Promise<void> {
     process.exit(0);
   }
 
+  // Validate required arguments for flags that need them
+  if (options.remoteAttachMode && !options.resumeSessionId) {
+    output({ success: false, error: 'Session ID required' }, () => {
+      console.log(formatError({
+        message: '--remote requires a session ID',
+        suggestions: ['Usage: vibe --remote <session-id>'],
+      }));
+    });
+    process.exit(1);
+  }
+  if (options.attachMode && !options.attachSessionId) {
+    output({ success: false, error: 'Session ID required' }, () => {
+      console.log(formatError({
+        message: '--attach requires a session ID',
+        suggestions: ['Usage: vibe --attach <session-id>', 'Use --list to see running sessions'],
+      }));
+    });
+    process.exit(1);
+  }
+
+  // Handle --status mode
+  if (options.statusMode) {
+    const hasAuth = !!getStoredAuth();
+    const user = getUserInfo();
+    output({ success: true, status: { authenticated: hasAuth, user } }, () => {
+      console.log(ui.highlight('Status:'));
+      console.log(`  Auth:     ${hasAuth ? ui.success('Authenticated') : ui.warn('Not authenticated')}`);
+      if (user?.email) console.log(`  User:     ${user.email}`);
+      console.log(`  Bridge:   ${options.bridgeUrl || 'wss://ws.minivibeapp.com (default)'}`);
+    });
+    process.exit(0);
+  }
+
+  // Handle --list mode (requires agent)
+  if (options.listSessions) {
+    output({ success: false, error: 'Not implemented' }, () => {
+      console.log(ui.warn('--list requires vibe-agent. Use: vibe-agent status'));
+    });
+    process.exit(1);
+  }
+
+  // Handle --attach mode (requires agent)
+  if (options.attachMode) {
+    if (!options.agentUrl) {
+      // Auto-discover agent
+      options.agentUrl = discoverAgent();
+    }
+    output({ success: false, error: 'Not implemented' }, () => {
+      console.log(ui.warn('--attach mode not yet implemented in refactored CLI'));
+      console.log(ui.dim('Session ID: ' + options.attachSessionId));
+    });
+    process.exit(1);
+  }
+
   // TODO: Handle subcommands (file upload, session list, etc.)
   if (subcommand) {
     output({ success: false, error: 'Not implemented' }, () => {
@@ -179,8 +277,8 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
-  // Check Claude installed
-  if (!checkClaudeInstalled()) {
+  // Check Claude installed (not required for --remote mode)
+  if (!options.remoteAttachMode && !checkClaudeInstalled()) {
     if (isJsonOutputMode()) {
       console.log(JSON.stringify({ success: false, error: 'Claude Code not found' }));
     } else {
@@ -189,10 +287,21 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
-  // Check auth
-  if (!options.agentUrl) {
-    const token = await ensureValidToken();
-    if (!token) {
+  // Handle --remote mode (no local Claude needed)
+  if (options.remoteAttachMode) {
+    output({ success: false, error: 'Not implemented' }, () => {
+      console.log(ui.warn('--remote mode not yet implemented in refactored CLI'));
+      console.log(ui.dim('Session ID: ' + options.resumeSessionId));
+      console.log(ui.dim('This mode will allow controlling sessions without local Claude.'));
+    });
+    process.exit(1);
+  }
+
+  // Check auth (manual token overrides stored token)
+  let authToken: string | null = options.manualToken;
+  if (!authToken && !options.agentUrl) {
+    authToken = await ensureValidToken();
+    if (!authToken) {
       if (isJsonOutputMode()) {
         console.log(JSON.stringify({ success: false, error: 'Not authenticated' }));
       } else {
@@ -205,7 +314,7 @@ async function main(): Promise<void> {
   // Create context
   const sessionId = options.resumeSessionId || uuidv4();
   const ctx = createAppContext(sessionId, process.env.VIBE_SESSION_ID || sessionId, options);
-  ctx.authToken = await ensureValidToken();
+  ctx.authToken = authToken;
   if (options.e2eEnabled && e2eModule) ctx.e2e = e2eModule;
 
   // Setup logging

@@ -25,14 +25,17 @@ export interface PendingPermission {
 export interface CliOptions {
   initialPrompt: string | null;
   resumeSessionId: string | null;
+  attachSessionId: string | null;
   bridgeUrl: string | null;
   agentUrl: string | null;
   sessionName: string | null;
+  manualToken: string | null;
   headlessMode: boolean;
   useNodePty: boolean;
   skipPermissions: boolean;
   listSessions: boolean;
   remoteAttachMode: boolean;
+  attachMode: boolean;
   e2eEnabled: boolean;
   verboseMode: boolean;
   jsonMode: boolean;
@@ -155,14 +158,17 @@ export function createDefaultOptions(): CliOptions {
   return {
     initialPrompt: null,
     resumeSessionId: null,
+    attachSessionId: null,
     bridgeUrl: null,
     agentUrl: null,
     sessionName: null,
+    manualToken: null,
     headlessMode: false,
     useNodePty: process.platform === 'win32',
     skipPermissions: false,
     listSessions: false,
     remoteAttachMode: false,
+    attachMode: false,
     e2eEnabled: false,
     verboseMode: false,
     jsonMode: false,

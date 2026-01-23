@@ -62,7 +62,12 @@ export function showHelp(): void {
   console.log(ui.highlight('Options:'));
   console.log(`  ${ui.dim('--resume, -r <id>')}           Resume a session by ID`);
   console.log(`  ${ui.dim('--name <name>')}               Name this session`);
+  console.log(`  ${ui.dim('--list')}                      List running sessions`);
+  console.log(`  ${ui.dim('--status')}                    Show connection status`);
+  console.log(`  ${ui.dim('--remote <id>')}               Remote control without local Claude`);
+  console.log(`  ${ui.dim('--attach <id>')}               Attach to a running session`);
   console.log(`  ${ui.dim('--bridge <url>')}              Custom bridge server URL`);
+  console.log(`  ${ui.dim('--token <token>')}             Use specific auth token`);
   console.log(`  ${ui.dim('--agent')}                     Connect via local vibe-agent`);
   console.log(`  ${ui.dim('--node-pty')}                  Use Node.js PTY wrapper`);
   console.log(`  ${ui.dim('--e2e')}                       Enable end-to-end encryption`);

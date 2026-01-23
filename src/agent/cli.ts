@@ -54,21 +54,42 @@ function parseArgs(): AgentOptions {
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
     switch (arg) {
-      case '--bridge':
-        options.bridge = args[++i];
+      case '--bridge': {
+        const url = args[++i];
+        if (!url || url.startsWith('-')) {
+          console.error(`${colors.red}✗ --bridge requires a URL${colors.reset}`);
+          console.error(`  Usage: vibe-agent --bridge <url>`);
+          process.exit(1);
+        }
+        options.bridge = url;
         break;
-      case '--token':
-        options.token = args[++i];
+      }
+      case '--token': {
+        const token = args[++i];
+        if (!token || token.startsWith('-')) {
+          console.error(`${colors.red}✗ --token requires a value${colors.reset}`);
+          console.error(`  Usage: vibe-agent --token <firebase-token>`);
+          process.exit(1);
+        }
+        options.token = token;
         break;
+      }
       case '--login':
         options.login = true;
         break;
       case '--logout':
         options.logout = true;
         break;
-      case '--name':
-        options.name = args[++i];
+      case '--name': {
+        const name = args[++i];
+        if (!name || name.startsWith('-')) {
+          console.error(`${colors.red}✗ --name requires a value${colors.reset}`);
+          console.error(`  Usage: vibe-agent --name <host-name>`);
+          process.exit(1);
+        }
+        options.name = name;
         break;
+      }
       case '--status':
         options.status = true;
         break;
@@ -82,6 +103,12 @@ function parseArgs(): AgentOptions {
       case '--e2e':
         options.e2e = true;
         break;
+      default:
+        if (arg.startsWith('-')) {
+          console.error(`${colors.red}✗ Unknown option: ${arg}${colors.reset}`);
+          console.error(`  Run: vibe-agent --help`);
+          process.exit(1);
+        }
     }
   }
 
