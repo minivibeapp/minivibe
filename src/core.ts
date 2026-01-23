@@ -552,6 +552,13 @@ function processSessionFile(ctx: AppContext, file: string): void {
 
     if (stats.size <= ctx.lastFileSize) return;
 
+    // Send typing indicator when file is growing (Claude is responding)
+    sendToBridge(ctx, {
+      type: 'claude_event',
+      sessionId: ctx.effectiveSessionId,
+      event: { type: 'thinking' },
+    });
+
     // Read only new bytes from the file
     // Use try-finally to ensure fd is always closed, even if read fails
     let fd: number | null = null;

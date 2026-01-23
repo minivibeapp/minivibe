@@ -73,6 +73,7 @@ export type BridgeMessageType =
   | 'joined_session'
   | 'message_history'
   | 'claude_message'
+  | 'claude_event'
   | 'permission_request'
   | 'session_status'
   | 'session_ended'
@@ -113,6 +114,7 @@ export type LocalMessageType =
   | 'terminal_input'
   | 'terminal_output'
   | 'claude_message'
+  | 'claude_event'
   | 'permission_request'
   | 'session_status';
 

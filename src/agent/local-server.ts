@@ -354,7 +354,7 @@ function handleLocalMessage(clientWs: WebSocket, msg: LocalMessage): void {
       }
 
       // Relay to attached clients
-      if (['claude_message', 'permission_request', 'session_status'].includes(msg.type)) {
+      if (['claude_message', 'claude_event', 'permission_request', 'session_status'].includes(msg.type)) {
         const msgSession = state.runningSessions.get(clientInfo.sessionId || '');
         if (msgSession?.attachedClients) {
           for (const attachedWs of msgSession.attachedClients) {
